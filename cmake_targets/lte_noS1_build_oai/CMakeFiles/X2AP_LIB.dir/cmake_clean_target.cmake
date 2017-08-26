@@ -1,0 +1,3 @@
+FILE(REMOVE_RECURSE
+  "libX2AP_LIB.a"
+)

@@ -1,0 +1,3 @@
+FILE(REMOVE_RECURSE
+  "libSCTP_CLIENT.a"
+)

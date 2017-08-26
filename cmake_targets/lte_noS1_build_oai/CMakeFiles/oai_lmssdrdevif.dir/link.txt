@@ -1,0 +1,1 @@
+/usr/bin/c++  -fPIC    -mavx2 -msse4.1 -mssse3  -std=c++11  -O2 -g -DNDEBUG   -shared -Wl,-soname,liboai_lmssdrdevif.so -o liboai_lmssdrdevif.so CMakeFiles/oai_lmssdrdevif.dir/home/oai/openairinterface5g/targets/ARCH/LMSSDR/USERSPACE/LIB/lms_lib.cpp.o -lLimeSuite 

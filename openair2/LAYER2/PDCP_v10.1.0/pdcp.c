@@ -50,6 +50,43 @@
 #include "platform_constants.h"
 #include "UTIL/LOG/vcd_signal_dumper.h"
 #include "msc.h"
+#include <linux/if_packet.h>
+#include<netinet/ip_icmp.h>   //Provides declarations for icmp header
+#include<netinet/udp.h>   //Provides declarations for udp header
+#include<netinet/tcp.h>   //Provides declarations for tcp header
+#include<netinet/ip.h>    //Provides declarations for ip header
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <netinet/ether.h>
+#include <sys/time.h>
+
+//#define MY_DEST_MAC0	0x48
+//#define MY_DEST_MAC1	0xd2
+//#define MY_DEST_MAC2	0x24
+//#define MY_DEST_MAC3	0x28
+//#define MY_DEST_MAC4	0xc1
+//#define MY_DEST_MAC5	0x3e
+
+#define MY_DEST_MAC0	0xa0
+#define MY_DEST_MAC1	0x39
+#define MY_DEST_MAC2	0xf7
+#define MY_DEST_MAC3	0x45
+#define MY_DEST_MAC4	0x66
+#define MY_DEST_MAC5	0x66
+
+
+/*
+#define MY_DEST_MAC0	0xa0
+#define MY_DEST_MAC1	0x39
+#define MY_DEST_MAC2	0xf7
+#define MY_DEST_MAC3	0x45
+#define MY_DEST_MAC4	0x66
+#define MY_DEST_MAC5	0x66
+ */
 
 #if defined(ENABLE_SECURITY)
 # include "UTIL/OSA/osa_defs.h"
@@ -67,6 +104,103 @@
 #ifndef OAI_EMU
 extern int otg_enabled;
 #endif
+
+
+ int dup_ack_count = 0; // Initialize DUP-ACK count to 0
+ int index_split = 0;
+ int arr_dup_ack[5] = {0, 0, 0, 0, 0}; // Array which stores the DUPACK count for 2:1, 1:1, 1:2, 1:3, 1:4 respectively
+ float select_ratio[5] = {1.1, 1.2, 1.3, 1.4, 1.5};
+ int flag[5]={0,0,0,0,0};
+ int position=0;
+ unsigned short csum(unsigned short *buf, int nwords)
+ {
+ 	unsigned long sum;
+ 	for(sum=0; nwords>0; nwords--){
+ 		sum += *buf++;
+ 		//  printf("%x\n",buf);
+ 	}
+ 	sum = (sum >> 16) + (sum &0xffff);
+ 	sum += (sum >> 16);
+ 	return (unsigned short)(~sum);
+ }
+
+
+
+ uint16_t tcp_checksum(const void *buff, uint16_t len, in_addr_t src_addr, in_addr_t dest_addr)
+ {
+ 	//printf("function called Buffer length %d , Src %u ,Dst %u\n",len,src_addr,dest_addr);
+ 	const uint16_t *buf1=buff;
+ 	uint16_t *ip_src=(void *)&src_addr;
+ 	uint16_t *ip_dst=(void *)&dest_addr;
+ 	uint32_t sum;
+ 	uint16_t length=len;
+ 	//printf("Length = %d\n", len);
+ 	// Calculate the sum                                            //
+ 	sum = 0;
+ 	while (len > 1)
+ 	{
+ 		//printf("%2x \t",*buf1);
+ 		sum += *buf1++;
+ 		if (sum & 0x80000000)
+ 			sum = (sum & 0xFFFF) + (sum >> 16);
+ 		len -= 2;
+ 	}
+ 	if ( len & 1 )
+ 		// Add the padding if the packet length is odd          //
+ 		sum += *((uint8_t *)buf1);
+ 	//printf(" \n");
+ 	// Add the pseudo-header                                        //
+ 	sum += *(ip_src++);
+ 	sum += *ip_src;
+ 	sum += *(ip_dst++);
+ 	sum += *ip_dst;
+ 	sum += htons(IPPROTO_TCP);
+ 	sum += htons(length);
+ 	// Add the carries                                              //
+ 	while (sum >> 16)
+ 		sum = (sum & 0xFFFF) + (sum >> 16);
+ 	//printf("%x\n",(~sum));
+ 	// Return the one's complement of sum                           //
+ 	return ( (uint16_t)(~sum)  );
+ }
+ uint16_t udp_checksum (const void *buff, uint16_t len, in_addr_t src_addr, in_addr_t dest_addr)
+ {
+ 	const uint16_t *buf=buff;
+ 	uint16_t *ip_src=(void *)&src_addr, *ip_dst=(void *)&dest_addr;
+ 	uint32_t sum;
+ 	uint16_t length=len;
+ 	// Calculate the sum
+ 	//    printf("Length= %u\n",len);                                        //
+ 	sum = 0;
+ 	while (len > 1)
+ 	{
+ 		//printf("%2x \t",*buf);
+ 		sum += *buf++;
+ 		if (sum & 0x80000000)
+ 			sum = (sum & 0xFFFF) + (sum >> 16);
+ 		len -= 2;
+ 	}
+
+ 	if ( len & 1 )
+ 		// Add the padding if the packet lengselect_ratio[0] = 1.1;ht is odd          //
+ 		sum += *((uint8_t *)buf);
+
+ 	// Add the pseudo-header                                        //
+ 	sum += *(ip_src++);
+ 	sum += *ip_src;
+
+ 	sum += *(ip_dst++);
+ 	sum += *ip_dst;
+
+ 	sum += htons(IPPROTO_UDP);
+ 	sum += htons(length);
+
+ 	// Add the carries                                              //
+ 	while (sum >> 16)
+ 		sum = (sum & 0xFFFF) + (sum >> 16);
+ 	// Return the one's complement of sum                           //
+ 	return ( (uint16_t)(~sum)  );
+ }
 
 
 //-----------------------------------------------------------------------------
@@ -126,6 +260,440 @@ boolean_t pdcp_data_req(
     mac_xface->macphy_exit("PDCP sdu buffer size > MAX_IP_PACKET_SIZE");
   }
   
+  if(modeP==PDCP_TRANSMISSION_MODE_DATA )
+  	{
+
+  		struct iphdr *iph = (struct iphdr*)sdu_buffer_pP;
+  		//char source_ip[32] ;
+  		char datagram[sdu_buffer_sizeP];
+  		//	char datagram=malloc(sdu_buffer_sizeP);
+  		memcpy(datagram, sdu_buffer_pP,sdu_buffer_sizeP);
+  		struct iphdr *iph1 = (struct iphdr*)datagram;
+  		struct tcphdr *tcph1 = (struct tcphdr*)(datagram+20);
+  		struct udphdr *udph1 = (struct udphdr*)(datagram+20);
+  		//int so=0;
+
+  		/*if(ntohl(tcph1->ack_seq)==seq){
+  			dup_ack_count+=1;
+  		}
+  		arr_dup_ack[] = dup_ack_count;
+  		 */
+
+  		int so = socket (AF_PACKET, SOCK_RAW, IPPROTO_RAW);
+  		/*struct sockaddr_in temp_source,temp_dest;
+  			temp_source.sin_addr.s_addr = iph1->saddr;
+  			temp_dest.sin_addr.s_addr = iph1->daddr;
+  		printf("   |-Source IP        : %s\n",inet_ntoa(temp_source.sin_addr));
+  		printf("   |-Destination IP   : %s\n",inet_ntoa(temp_dest.sin_addr));*/
+  		/*printf("   |-ACK Number       : %ld\n",ntohl(tcph1->ack));
+  		printf("   |-ACK SequenceNo   : %ld\n",ntohl(tcph1->ack_seq));
+  		printf("   |-ACK SequenceNo   : %ld\n",seq);
+  		printf("   |-Modified Source IP      : %s\n",inet_ntoa(source.sin_addr));
+  		printf("   |-Modified Destination IP : %s\n",inet_ntoa(dest.sin_addr));
+  		 */
+  		//Change 1
+  		iph1->daddr =inet_addr ("192.168.188.40");
+  		iph1->check=htons(0);
+  		iph1->check = csum((unsigned short *)datagram, sizeof(struct iphdr)/2);
+
+
+  		if(iph->protocol==6)
+  		{
+  			tcph1->check=0;
+  			tcph1->check=tcp_checksum((void *)(datagram + sizeof (struct iphdr)),(sdu_buffer_sizeP-sizeof(struct iphdr)),iph1->saddr,iph1->daddr);
+  		}
+  		else if(iph->protocol==17){
+
+  			udph1->check=0;
+  			udph1->check=udp_checksum((void *)(datagram + sizeof (struct iphdr)),ntohs(udph1->len),iph1->saddr,iph1->daddr);
+
+  		}
+
+
+  		/*if(so == -1)
+  			{
+  				//socket creation failed, may be because of non-root privileges
+  				perror("Failed to create raw socket");
+  				exit(1);
+  			}
+  		 */
+
+
+
+  		char sendbuf[sizeof(struct ether_header)+sdu_buffer_sizeP];
+  		//char sendbuf=malloc(sizeof(struct ether_header)+sdu_buffer_sizeP);
+  		int tx_len = 0;
+  		struct ether_header *eh = (struct ether_header *) sendbuf;
+
+  		char *data=(char *)(sendbuf+ sizeof(struct ether_header));
+  		memcpy(data,datagram,sdu_buffer_sizeP);
+  		struct sockaddr_ll socket_address;
+
+  		struct ifreq if_idx;
+  		struct ifreq if_mac;
+  		char ifName[100];
+  		strcpy(ifName, "eth0");
+  		memset(&if_idx, 0, sizeof(struct ifreq));
+  		strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
+  		/*if (ioctl(so, SIOCGIFINDEX, &if_idx) < 0)
+  			perror("SIOCGIFINDEX");
+  		// Get the MAC address of the interface to send on
+  		memset(&if_mac, 0, sizeof(struct ifreq));
+  		strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
+  		if (ioctl(so, SIOCGIFHWADDR, &if_mac) < 0)
+  			perror("SIOCGIFHWADDR");*/
+  		/* Ethernet header */
+  		eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
+  		eh->ether_shost[1] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[1];
+  		eh->ether_shost[2] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[2];
+  		eh->ether_shost[3] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[3];
+  		eh->ether_shost[4] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[4];
+  		eh->ether_shost[5] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[5];
+  		eh->ether_dhost[0] = MY_DEST_MAC0;
+  		eh->ether_dhost[1] = MY_DEST_MAC1;
+  		eh->ether_dhost[2] = MY_DEST_MAC2;
+  		eh->ether_dhost[3] = MY_DEST_MAC3;
+  		eh->ether_dhost[4] = MY_DEST_MAC4;
+  		eh->ether_dhost[5] = MY_DEST_MAC5;
+
+
+
+
+  		/* Ethertype field */
+  		eh->ether_type = htons(ETH_P_IP);
+  		tx_len = sizeof(struct ether_header)+sdu_buffer_sizeP;
+
+  		/* Index of the network device */
+  		socket_address.sll_ifindex = if_idx.ifr_ifindex;
+  		/* Address length*/
+  		socket_address.sll_halen = ETH_ALEN;
+  		/* Destination MAC */
+  		socket_address.sll_addr[0] = MY_DEST_MAC0;
+  		socket_address.sll_addr[1] = MY_DEST_MAC1;
+  		socket_address.sll_addr[2] = MY_DEST_MAC2;
+  		socket_address.sll_addr[3] = MY_DEST_MAC3;
+  		socket_address.sll_addr[4] = MY_DEST_MAC4;
+  		socket_address.sll_addr[5] = MY_DEST_MAC5;
+
+  		//printf(" Wifi count= %d , LTE count =%d\n",wifi_count,lte_count);
+  		//if(iph1->saddr==inet_addr("192.168.130.132") && iph1->id%10!=2 && iph1->id%10!=4 && iph1->id%10!=6 && iph1->id%10!=8  && iph1->id%10!=0 && iph1->protocol==6)
+  		//if(iph1->saddr==inet_addr("192.168.130.132") && iph1->protocol!=3 && iph1->protocol!=4 && iph1->id%10!=5 && iph1->id%10!=6 && iph1->id%10!=7 && iph1->id%10!=8  && iph1->protocol!=9 && iph1->id%10!=0)
+
+  		int dynamic=0; //1-dynamic , 0- static
+  		float lte_wifi_ratio;
+
+  		lte_wifi_ratio=2; //Set static Value of split here, if dynamic it will be changed dynamically
+
+  		if(dynamic==1)
+  		{
+  			/******************* Probing Section [probing time = 500 msec] ***************************/
+
+  			long rem =  current_timestamp_3_sec() % 3000;
+  			//printf("\nCurrent Timestamp: %d \n", rem);
+  			int min=999;
+
+  			if (rem <= 100)
+  			{
+  				index_split=0;
+  				if(flag[index_split]==0)
+  				{
+  					dup_ack_count=0;
+  					flag[index_split]=1;
+  				}
+  				//select_ratio[0] = 2.1;
+  				position=6;
+  				//printf("Dup ack in index 0 =%d",dup_ack_count);
+  			}
+  			else if (rem >=101 && rem <= 200)
+  			{
+  				index_split=1;
+  				if(flag[index_split]==0)
+  				{
+  					arr_dup_ack[index_split-1]=dup_ack_count;
+  					//	printf("Dup ack in index 0 =%d\n",dup_ack_count);
+  					dup_ack_count=0;
+  					flag[index_split]=1;
+  				}
+
+  				//select_ratio[1] = 1.1;
+
+  				position=6;
+  				arr_dup_ack[index_split]=dup_ack_count;
+
+  			}
+  			else if (rem >=201 && rem <= 300)
+  			{
+  				index_split=2;
+  				if(flag[index_split]==0)
+  				{
+  					arr_dup_ack[index_split-1]=dup_ack_count;
+  					//	printf("Dup ack in index 1 =%d\n",dup_ack_count);
+  					dup_ack_count=0;
+  					flag[index_split]=1;
+  				}
+
+
+  				//select_ratio[2] = 1.2;
+
+  				position=6;
+  				//arr_dup_ack[index_split]=dup_ack_count;
+
+  			}
+  			else if (rem >=301 && rem <= 400)
+  			{
+  				index_split=3;
+  				if(flag[index_split]==0)
+  				{
+  					arr_dup_ack[index_split-1]=dup_ack_count;
+  					//	printf("Dup ack in index 2 =%d\n",dup_ack_count);
+  					dup_ack_count=0;
+  					flag[index_split]=1;
+  				}
+
+  				//select_ratio[3] = 1.3;
+
+  				position=6;
+  				//arr_dup_ack[index_split]=dup_ack_count;
+
+  			}
+  			else if (rem >=401 && rem <= 500)
+  			{
+  				index_split=4;
+  				if(flag[index_split]==0)
+  				{
+  					arr_dup_ack[index_split-1]=dup_ack_count;
+  					//printf("Dup ack in index 3 =%d\n",dup_ack_count);
+  					dup_ack_count=0;
+  					flag[index_split]=1;
+  				}
+
+  				//select_ratio[4] = 1.4;
+
+  				position=6;
+  				arr_dup_ack[index_split]=dup_ack_count;
+  				//printf("Dup ack in index 4 =%d\n",dup_ack_count);
+  			}
+
+  			if(position==6 &&  rem>= 500){
+
+
+  				for(i=0;i<5;i++)
+  				{
+  					flag[i]=0;
+  					if(min>=arr_dup_ack[i])
+  					{
+  						//printf("\nNumber of dupacks for split %f = %d\n",select_ratio[i],arr_dup_ack[i]);
+  						min=arr_dup_ack[i];
+  						position =i;
+  					}
+  					printf("\nDupAck Count of %f split = %d",select_ratio[i], arr_dup_ack[i]);
+  				}
+  				index_split=position;
+  				printf("\nThe split %f is being used !!!\n index = %d",select_ratio[index_split], index_split);
+  			}
+
+  			lte_wifi_ratio= select_ratio[index_split];
+  		}
+
+
+
+
+  		if(lte_wifi_ratio == 8.2) // LTE : Wi-Fi :: 80% : 20%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%10!=0 && iph1->id%10!=4 && iph1->id%10!=5 && iph1->id%10!=6 && iph1->id%10!=7 && iph1->id%10!=3 && iph1->id%10!=2 && iph1->id%10!=1)
+  			{
+  				wifi_count++;
+  				//printf("To wi-Fi");
+  				//	printf("   |-Identification    : %u\n",iph->id);
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				//close(so);
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+
+
+  		if(lte_wifi_ratio == 1.11) // LTE : Wi-Fi :: 1 : 11
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%12!=0)
+  			{
+  				wifi_count++;
+  				//printf("To wi-Fi");
+  				//	printf("   |-Identification    : %u\n",iph->id);
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				//close(so);
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+
+  		if(lte_wifi_ratio == 1.9) // LTE : Wi-Fi :: 10% : 90%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%10!=0)
+  			{
+  				wifi_count++;
+  				//printf("To wi-Fi");
+  				//	printf("   |-Identification    : %u\n",iph->id);
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				//close(so);
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+
+  		if(lte_wifi_ratio == 2.8) // LTE : Wi-Fi :: 20% : 80%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%10!=0 && iph1->id%10!=1)
+  			{
+
+  				wifi_count++;
+  				//printf("To wi-Fi");
+  				//	printf("   |-Identification    : %u\n",iph->id);
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				//close(so);
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+  		if(lte_wifi_ratio == 2.1) // LTE : Wi-Fi :: 66% : 33%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%12==9 && iph1->id%12==10 && iph1->id%12==11)
+  			{
+  				wifi_count++;
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+
+  		if(lte_wifi_ratio == 5.5) // LTE : Wi-Fi :: 50% : 50%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.188.36") && iph1->id%10!=0 && iph1->id%10!=1 && iph1->id%10!=2 && iph1->id%10!=3 && iph1->id%10!=4)
+  			{
+  				printf("Routing");
+  				wifi_count++;
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+  		if(lte_wifi_ratio == 1.2) // LTE : Wi-Fi :: 33% : 66%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%10!=0 && iph1->id%10!=1 && iph1->id%10!=2)
+  			{
+  				wifi_count++;
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+  		if(lte_wifi_ratio == 1.3) // LTE : Wi-Fi :: 25% : 75%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%12!=0 && iph1->id%12!=1 && iph1->id%12!=2)
+  			{
+  				wifi_count++;
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+
+  		if(lte_wifi_ratio == 1.4) // LTE : Wi-Fi :: 20% : 80%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198") && iph1->id%10!=0 && iph1->id%10!=1 )
+  			{
+  				wifi_count++;
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+  		if(lte_wifi_ratio == 1.5) // LTE : Wi-Fi :: 10% : 50%
+  		{
+  			if(iph1->saddr==inet_addr("192.168.6.198")  && iph1->id%12!=0 && iph1->id%12!=1 && iph1->id%12!=2)
+  			{
+  				wifi_count++;
+  				//printf("To wi-Fi");
+  				//	printf("   |-Identification    : %u\n",iph->id);
+  				if (sendto (so, sendbuf , tx_len ,  0, (struct sockaddr *) &socket_address, sizeof (struct sockaddr_ll)) < 0)
+  				{
+  					perror("send to failed");
+  				}
+  				//close(so);
+  				return ret;
+  			}
+  			else{
+  				lte_count++;
+  			}
+  		}
+
+  	}
+  long
+  current_timestamp() {
+  	struct timeval te;
+  	gettimeofday(&te, NULL); // get current time
+  	//long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // caculate milliseconds
+  	//long sec= te.tv_sec;
+  	long milliseconds =te.tv_usec/1000;// caculate milliseconds 1000
+
+  	return milliseconds;
+  }
+
+  long
+  current_timestamp_3_sec() {
+  	struct timeval te;
+  	gettimeofday(&te, NULL); // get current time
+  	//long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // caculate milliseconds
+  	long sec= te.tv_sec*1000LL + te.tv_usec/1000;// caculate milliseconds 1000
+
+  	return sec;
+  }
+
   if (modeP == PDCP_TRANSMISSION_MODE_TRANSPARENT) {
     AssertError (rb_idP < NB_RB_MBMS_MAX, return FALSE, "RB id is too high (%u/%d) %u %u!\n", rb_idP, NB_RB_MBMS_MAX, ctxt_pP->module_id, ctxt_pP->rnti);
   } else {

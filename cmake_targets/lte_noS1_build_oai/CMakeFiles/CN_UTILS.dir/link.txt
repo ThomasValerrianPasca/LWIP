@@ -1,0 +1,2 @@
+/usr/bin/ar cr libCN_UTILS.a  CMakeFiles/CN_UTILS.dir/home/oai/openairinterface5g/openair3/UTILS/conversions.c.o CMakeFiles/CN_UTILS.dir/home/oai/openairinterface5g/openair3/UTILS/enum_string.c.o CMakeFiles/CN_UTILS.dir/home/oai/openairinterface5g/openair3/UTILS/log.c.o CMakeFiles/CN_UTILS.dir/home/oai/openairinterface5g/openair3/UTILS/mcc_mnc_itu.c.o
+/usr/bin/ranlib libCN_UTILS.a

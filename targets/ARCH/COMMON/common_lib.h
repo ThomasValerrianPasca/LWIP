@@ -36,7 +36,7 @@
 #include <sys/types.h>
 
 /* name of shared library implementing the radio front end */
-#define OAI_RF_LIBNAME        "liboai_device.so"
+#define OAI_RF_LIBNAME        "liboai_usrpdevif.so"
 /* name of shared library implementing the transport */
 #define OAI_TP_LIBNAME        "liboai_transpro.so"
 

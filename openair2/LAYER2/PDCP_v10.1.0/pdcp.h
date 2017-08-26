@@ -103,7 +103,8 @@ public_pdcp(unsigned int Pdcp_stats_rx[NB_MODULES_MAX][NB_CNX_CH][NB_RAB_MAX]);
 public_pdcp(unsigned int Pdcp_stats_rx_bytes[NB_MODULES_MAX][NB_CNX_CH][NB_RAB_MAX]);
 public_pdcp(unsigned int Pdcp_stats_rx_bytes_last[NB_MODULES_MAX][NB_CNX_CH][NB_RAB_MAX]);
 public_pdcp(unsigned int Pdcp_stats_rx_rate[NB_MODULES_MAX][NB_CNX_CH][NB_RAB_MAX]);
-
+protected_pdcp(int lte_count);
+protected_pdcp(int wifi_count);
 typedef struct pdcp_stats_s {
   time_stats_t pdcp_run;
   time_stats_t data_req;
@@ -492,6 +493,8 @@ protected_pdcp(sdu_size_t             pdcp_input_sdu_remaining_size_to_read;)
     (((hash_key_t)(0x0000000000000001))  << 63))
 
 public_pdcp(hash_table_t  *pdcp_coll_p;)
+public_pdcp(long current_timestamp(void);)
+public_pdcp(long current_timestamp_3_sec(void);)
 
 #endif
 /*@}*/
