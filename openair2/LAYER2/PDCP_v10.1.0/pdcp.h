@@ -436,7 +436,9 @@ typedef struct pdcp_missing_pdu_info_t {
 #define PDCP_SN_7BIT  7
 #define PDCP_SN_12BIT 12
 
-
+protected_pdcp(	int so);
+protected_pdcp(struct ifreq if_idx);
+protected_pdcp(struct ifreq if_mac);
 protected_pdcp(signed int             pdcp_2_nas_irq;)
 public_pdcp(pdcp_stats_t              UE_pdcp_stats[NUMBER_OF_UE_MAX];)
 public_pdcp(pdcp_stats_t              eNB_pdcp_stats[NUMBER_OF_eNB_MAX];)

@@ -126,6 +126,12 @@ time.h
 stdint.h
 -
 
+/home/oai/openairinterface5g/common/utils/utils.h
+stdint.h
+-
+sys/types.h
+-
+
 /home/oai/openairinterface5g/openair1/PHY/CODING/defs.h
 stdint.h
 -
@@ -461,6 +467,30 @@ rtai_posix.h
 -
 pthread.h
 -
+
+/home/oai/openairinterface5g/openair1/SIMULATION/ETH_TRANSPORT/netlink_init.c
+sys/socket.h
+-
+linux/netlink.h
+-
+signal.h
+-
+stdio.h
+-
+stdlib.h
+-
+string.h
+-
+unistd.h
+-
+sys/types.h
+-
+fcntl.h
+-
+errno.h
+-
+platform_constants.h
+/home/oai/openairinterface5g/openair1/SIMULATION/ETH_TRANSPORT/platform_constants.h
 
 /home/oai/openairinterface5g/openair1/SIMULATION/ETH_TRANSPORT/proto.h
 SIMULATION/ETH_TRANSPORT/defs.h
@@ -3548,6 +3578,10 @@ stdint.h
 assert.h
 -
 
+/home/oai/openairinterface5g/openair3/NAS/COMMON/UTIL/memory.h
+stddef.h
+-
+
 /home/oai/openairinterface5g/openair3/NAS/COMMON/UTIL/nas_timer.h
 
 /home/oai/openairinterface5g/openair3/NAS/COMMON/securityDef.h
@@ -3569,6 +3603,18 @@ commonDef.h
 /home/oai/openairinterface5g/openair3/NAS/UE/API/USER/commonDef.h
 networkDef.h
 /home/oai/openairinterface5g/openair3/NAS/UE/API/USER/networkDef.h
+
+/home/oai/openairinterface5g/openair3/NAS/UE/API/USER/user_api.h
+commonDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/API/USER/commonDef.h
+networkDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/API/USER/networkDef.h
+at_command.h
+/home/oai/openairinterface5g/openair3/NAS/UE/API/USER/at_command.h
+user_api_defs.h
+/home/oai/openairinterface5g/openair3/NAS/UE/API/USER/user_api_defs.h
+user_defs.h
+/home/oai/openairinterface5g/openair3/NAS/UE/API/USER/user_defs.h
 
 /home/oai/openairinterface5g/openair3/NAS/UE/API/USER/user_api_defs.h
 sys/types.h
@@ -3610,6 +3656,14 @@ emm_proc_defs.h
 
 /home/oai/openairinterface5g/openair3/NAS/UE/EMM/emm_fsm_defs.h
 
+/home/oai/openairinterface5g/openair3/NAS/UE/EMM/emm_main.h
+commonDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/EMM/commonDef.h
+networkDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/EMM/networkDef.h
+user_defs.h
+/home/oai/openairinterface5g/openair3/NAS/UE/EMM/user_defs.h
+
 /home/oai/openairinterface5g/openair3/NAS/UE/EMM/emm_proc_defs.h
 
 /home/oai/openairinterface5g/openair3/NAS/UE/ESM/esmData.h
@@ -3622,17 +3676,83 @@ OctetString.h
 EpsBearerIdentity.h
 /home/oai/openairinterface5g/openair3/NAS/UE/ESM/EpsBearerIdentity.h
 
+/home/oai/openairinterface5g/openair3/NAS/UE/ESM/esm_ebr.h
+OctetString.h
+/home/oai/openairinterface5g/openair3/NAS/UE/ESM/OctetString.h
+networkDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/ESM/networkDef.h
+esmData.h
+/home/oai/openairinterface5g/openair3/NAS/UE/ESM/esmData.h
+nas_timer.h
+/home/oai/openairinterface5g/openair3/NAS/UE/ESM/nas_timer.h
+user_defs.h
+/home/oai/openairinterface5g/openair3/NAS/UE/ESM/user_defs.h
+
 /home/oai/openairinterface5g/openair3/NAS/UE/ESM/esm_pt_defs.h
 UTIL/nas_timer.h
 /home/oai/openairinterface5g/openair3/NAS/UE/ESM/UTIL/nas_timer.h
 IES/ProcedureTransactionIdentity.h
 /home/oai/openairinterface5g/openair3/NAS/UE/ESM/IES/ProcedureTransactionIdentity.h
 
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_parser.h
+
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_proc.h
+commonDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/commonDef.h
+networkDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/networkDef.h
+user_defs.h
+/home/oai/openairinterface5g/openair3/NAS/UE/user_defs.h
+emm_main.h
+/home/oai/openairinterface5g/openair3/NAS/UE/emm_main.h
+esm_ebr.h
+/home/oai/openairinterface5g/openair3/NAS/UE/esm_ebr.h
+esmData.h
+/home/oai/openairinterface5g/openair3/NAS/UE/esmData.h
+
 /home/oai/openairinterface5g/openair3/NAS/UE/nas_proc_defs.h
+
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_ue_task.c
+utils.h
+/home/oai/openairinterface5g/openair3/NAS/UE/utils.h
+assertions.h
+/home/oai/openairinterface5g/openair3/NAS/UE/assertions.h
+intertask_interface.h
+/home/oai/openairinterface5g/openair3/NAS/UE/intertask_interface.h
+nas_ue_task.h
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_ue_task.h
+UTIL/LOG/log.h
+/home/oai/openairinterface5g/openair3/NAS/UE/UTIL/LOG/log.h
+user_defs.h
+/home/oai/openairinterface5g/openair3/NAS/UE/user_defs.h
+user_api.h
+/home/oai/openairinterface5g/openair3/NAS/UE/user_api.h
+nas_parser.h
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_parser.h
+nas_proc.h
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_proc.h
+msc.h
+/home/oai/openairinterface5g/openair3/NAS/UE/msc.h
+memory.h
+/home/oai/openairinterface5g/openair3/NAS/UE/memory.h
+nas_user.h
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_user.h
 
 /home/oai/openairinterface5g/openair3/NAS/UE/nas_ue_task.h
 openairinterface5g_limits.h
 /home/oai/openairinterface5g/openair3/NAS/UE/openairinterface5g_limits.h
+user_defs.h
+/home/oai/openairinterface5g/openair3/NAS/UE/user_defs.h
+
+/home/oai/openairinterface5g/openair3/NAS/UE/nas_user.h
+commonDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/commonDef.h
+networkDef.h
+/home/oai/openairinterface5g/openair3/NAS/UE/networkDef.h
+emm_main.h
+/home/oai/openairinterface5g/openair3/NAS/UE/emm_main.h
+esm_ebr.h
+/home/oai/openairinterface5g/openair3/NAS/UE/esm_ebr.h
 user_defs.h
 /home/oai/openairinterface5g/openair3/NAS/UE/user_defs.h
 
@@ -3695,20 +3815,6 @@ mme_default_values.h
 /home/oai/openairinterface5g/openair3/UTILS/queue.h
 
 /home/oai/openairinterface5g/openair3/UTILS/tree.h
-
-/home/oai/openairinterface5g/targets/ARCH/COMMON/common_lib.c
-stdio.h
--
-strings.h
--
-dlfcn.h
--
-errno.h
--
-string.h
--
-common_lib.h
-/home/oai/openairinterface5g/targets/ARCH/COMMON/common_lib.h
 
 /home/oai/openairinterface5g/targets/ARCH/COMMON/common_lib.h
 stdint.h

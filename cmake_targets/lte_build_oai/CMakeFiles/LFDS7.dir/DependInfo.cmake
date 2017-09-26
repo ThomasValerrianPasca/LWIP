@@ -98,7 +98,7 @@ SET(CMAKE_TARGET_DEFINITIONS
   "OPENAIR_LTE"
   "PACKAGE_BUGREPORT=\"openair4g-devel@lists.eurecom.fr\""
   "PACKAGE_NAME=\"NotDefined\""
-  "PACKAGE_VERSION=\"Branch: LWIP Abrev. Hash: 17b9a9e Date: Tue Aug 8 09:58:36 2017 +0200\""
+  "PACKAGE_VERSION=\"Branch: LWIP Abrev. Hash: 3acece5 Date: Sun Aug 27 00:04:36 2017 +0530\""
   "PC_DSP"
   "PC_TARGET"
   "PHYSIM"

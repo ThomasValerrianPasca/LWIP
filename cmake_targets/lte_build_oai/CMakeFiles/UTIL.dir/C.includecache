@@ -1034,6 +1034,12 @@ log_extern.h
 cli.h
 /home/oai/openairinterface5g/openair2/UTIL/CLI/cli.h
 
+/home/oai/openairinterface5g/openair2/UTIL/LISTS/list.c
+list.h
+/home/oai/openairinterface5g/openair2/UTIL/LISTS/list.h
+string.h
+-
+
 /home/oai/openairinterface5g/openair2/UTIL/LISTS/list.h
 UTIL/MEM/mem_block.h
 /home/oai/openairinterface5g/openair2/UTIL/LISTS/UTIL/MEM/mem_block.h
@@ -1044,6 +1050,32 @@ linux/types.h
 stdlib.h
 -
 sys/queue.h
+-
+
+/home/oai/openairinterface5g/openair2/UTIL/LISTS/list2.c
+list.h
+/home/oai/openairinterface5g/openair2/UTIL/LISTS/list.h
+assertions.h
+/home/oai/openairinterface5g/openair2/UTIL/LISTS/assertions.h
+string.h
+-
+
+/home/oai/openairinterface5g/openair2/UTIL/LOG/log.c
+log.h
+/home/oai/openairinterface5g/openair2/UTIL/LOG/log.h
+vcd_signal_dumper.h
+/home/oai/openairinterface5g/openair2/UTIL/LOG/vcd_signal_dumper.h
+assertions.h
+/home/oai/openairinterface5g/openair2/UTIL/LOG/assertions.h
+intertask_interface.h
+/home/oai/openairinterface5g/openair2/UTIL/LOG/intertask_interface.h
+pthread.h
+-
+string.h
+-
+rtai.h
+-
+rtai_fifos.h
 -
 
 /home/oai/openairinterface5g/openair2/UTIL/LOG/log.h
@@ -1089,6 +1121,10 @@ log.h
 /home/oai/openairinterface5g/openair2/UTIL/LOG/log_if.h
 log.h
 /home/oai/openairinterface5g/openair2/UTIL/LOG/log.h
+
+/home/oai/openairinterface5g/openair2/UTIL/LOG/vcd_signal_dumper.h
+T.h
+/home/oai/openairinterface5g/openair2/UTIL/LOG/T.h
 
 /home/oai/openairinterface5g/openair2/UTIL/MEM/mem_block.c
 mem_block.h
