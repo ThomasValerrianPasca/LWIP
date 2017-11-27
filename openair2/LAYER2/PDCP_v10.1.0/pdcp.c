@@ -328,7 +328,6 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		eh->ether_dhost[3] = MY_DEST_MAC3;
 		eh->ether_dhost[4] = MY_DEST_MAC4;
 		eh->ether_dhost[5] = MY_DEST_MAC5;
-
 		/* Ethertype field */
 		eh->ether_type = htons(ETH_P_IP);
 		tx_len = sizeof(struct ether_header) + sdu_buffer_sizeP;
