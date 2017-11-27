@@ -2204,26 +2204,6 @@ rlc_um_entity.h
 mac_primitives.h
 /home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/mac_primitives.h
 
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/rlc_um_segment.c
-platform_types.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/platform_types.h
-platform_constants.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/platform_constants.h
-assert.h
--
-assertions.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/assertions.h
-msc.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/msc.h
-list.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/list.h
-rlc_um.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/rlc_um.h
-rlc_primitives.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/rlc_primitives.h
-UTIL/LOG/log.h
-/home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/UTIL/LOG/log.h
-
 /home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/rlc_um_segment.h
 rlc_um_entity.h
 /home/oai/openairinterface5g/openair2/LAYER2/RLC/UM_v9.3.0/rlc_um_entity.h
