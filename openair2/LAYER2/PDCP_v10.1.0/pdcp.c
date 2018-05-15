@@ -63,6 +63,14 @@
 #include <net/if.h>
 #include <netinet/ether.h>
 #include <sys/time.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <netinet/udp.h>
+//#include <linux/icmp.h>
+
+
+
 
 //#define MY_DEST_MAC0	0x48
 //#define MY_DEST_MAC1	0xd2
@@ -78,7 +86,7 @@
 //#define MY_DEST_MAC4	0x66
 //#define MY_DEST_MAC5	0x66
 
- // OAIUE
+// OAIUE
 #define MY_DEST_MAC0	0xec
 #define MY_DEST_MAC1	0x08
 #define MY_DEST_MAC2	0x6b
@@ -87,13 +95,13 @@
 #define MY_DEST_MAC5	0xbe
 
 //Mobile Phone
- /*#define MY_DEST_MAC0	0xa0
+/*#define MY_DEST_MAC0	0xa0
  #define MY_DEST_MAC1	0x39
  #define MY_DEST_MAC2	0xf7
  #define MY_DEST_MAC3	0x45
  #define MY_DEST_MAC4	0x66
  #define MY_DEST_MAC5	0x66
-*/
+ */
 
 #if defined(ENABLE_SECURITY)
 # include "UTIL/OSA/osa_defs.h"
@@ -111,6 +119,18 @@
 #ifndef OAI_EMU
 extern int otg_enabled;
 #endif
+
+//for steering
+protocol_ctxt_t* copy_ctxt_pP;
+srb_flag_t copy_srb_flagP;
+//	srb_flag_t copy_srb_flagP;
+rb_id_t copy_rb_idP;
+mui_t copy_muiP;
+confirm_t copy_confirmP;
+sdu_size_t copy_sdu_buffer_sizeP;
+unsigned char * copy_sdu_buffer_pP;
+//	pdcp_transmission_mode_t copy_modeP;
+
 
 int dup_ack_count = 0; // Initialize DUP-ACK count to 0
 int index_split = 0;
@@ -137,7 +157,6 @@ uint16_t tcp_checksum(const void *buff, uint16_t len, in_addr_t src_addr,
 	uint16_t *ip_dst = (void *) &dest_addr;
 	uint32_t sum;
 	uint16_t length = len;
-	//printf("Length = %d\n", len);
 	// Calculate the sum                                            //
 	sum = 0;
 	while (len > 1) {
@@ -172,7 +191,6 @@ uint16_t udp_checksum(const void *buff, uint16_t len, in_addr_t src_addr,
 	uint32_t sum;
 	uint16_t length = len;
 	// Calculate the sum
-	//    printf("Length= %u\n",len);                                        //
 	sum = 0;
 	while (len > 1) {
 		//printf("%2x \t",*buf);
@@ -181,27 +199,218 @@ uint16_t udp_checksum(const void *buff, uint16_t len, in_addr_t src_addr,
 			sum = (sum & 0xFFFF) + (sum >> 16);
 		len -= 2;
 	}
-
 	if (len & 1)
 		// Add the padding if the packet lengselect_ratio[0] = 1.1;ht is odd          //
 		sum += *((uint8_t *) buf);
-
 	// Add the pseudo-header                                        //
 	sum += *(ip_src++);
 	sum += *ip_src;
-
 	sum += *(ip_dst++);
 	sum += *ip_dst;
-
 	sum += htons(IPPROTO_UDP);
 	sum += htons(length);
-
 	// Add the carries                                              //
 	while (sum >> 16)
 		sum = (sum & 0xFFFF) + (sum >> 16);
 	// Return the one's complement of sum                           //
 	return ((uint16_t) (~sum));
 }
+
+
+
+float current_timestamp() {
+	struct timeval te;
+	gettimeofday(&te, NULL); // get current time
+	//long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // calculate milliseconds
+	//long sec= te.tv_sec;
+	float milliseconds = te.tv_usec / 1000;  // calculate milliseconds 1000
+
+	return milliseconds;
+}
+
+float current_timestamp_3_sec() {
+	struct timeval te;
+	gettimeofday(&te, NULL); // get current time
+	//long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // caculate milliseconds
+	float sec = te.tv_sec * 1000LL + te.tv_usec / 1000; // calculate milliseconds 1000
+
+	return sec;
+}
+
+
+// Thread Monitors the network performance by sending the packets
+/*
+ * ICP packets are sent periodically the listener thread verifies the packet is received or
+ * lost over the period. Link trip time is calculated using the time stamps in the ICMP
+ */
+
+int send_probing_packets()
+{
+
+	struct iphdr *ip;
+	struct icmphdr* icmp;
+	struct sockaddr_in connection;
+	uint16_t wifi_id_count=0, lte_id_count=1;
+	while(1)
+	{
+		usleep (1000000);
+		// send probe packet over Wi-Fi
+		char *dst_addr="192.168.140.50"; //(Destination Wi-Fi interface IP)
+		char *src_addr="192.168.140.40"; //Sender Wi-Fi interface IP address
+		int sockfd, optval;
+
+		memset(packet,0, sizeof(struct iphdr)+sizeof(struct icmphdr));
+		ip = (struct iphdr*) packet;
+		icmp = (struct icmphdr*) (packet + sizeof(struct iphdr));
+
+		icmp->type      = ICMP_ECHO;
+		wifi_id_count=wifi_id_count+2;
+		icmp->un.echo.sequence=wifi_id_count;
+
+		//icmp->checksum = in_cksum((unsigned short *)icmp, sizeof(struct icmphdr));
+		icmp->checksum = csum((unsigned short *)icmp, sizeof(struct icmphdr)/2);
+		ip->ihl         = 5;
+		ip->version     = 4;
+		ip->tot_len     = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
+		ip->protocol    = IPPROTO_ICMP;
+		ip->saddr       = inet_addr(src_addr);
+		ip->daddr       = inet_addr(dst_addr);
+		//ip->check 		= in_cksum((unsigned short *)ip, sizeof(struct iphdr));
+		ip->ttl			= 64;
+		ip->check		= csum((unsigned short *)ip, sizeof(struct iphdr)/2);
+
+		//printf("length of ip %d", ip->tot_len);
+		char sendbuf[sizeof(struct ether_header) +  sizeof(struct iphdr) + sizeof(struct icmphdr)];
+		int tx_len = 0;
+		struct ether_header *eh = (struct ether_header *) sendbuf;
+
+		char *data = (char *) (sendbuf + sizeof(struct ether_header));
+		memcpy(data, packet, (sizeof(struct iphdr) + sizeof(struct icmphdr)));
+		struct sockaddr_ll socket_address;
+
+		/* Ethernet header */
+		eh->ether_shost[0] = ((uint8_t *) &if_mac.ifr_hwaddr.sa_data)[0];
+		eh->ether_shost[1] = ((uint8_t *) &if_mac.ifr_hwaddr.sa_data)[1];
+		eh->ether_shost[2] = ((uint8_t *) &if_mac.ifr_hwaddr.sa_data)[2];
+		eh->ether_shost[3] = ((uint8_t *) &if_mac.ifr_hwaddr.sa_data)[3];
+		eh->ether_shost[4] = ((uint8_t *) &if_mac.ifr_hwaddr.sa_data)[4];
+		eh->ether_shost[5] = ((uint8_t *) &if_mac.ifr_hwaddr.sa_data)[5];
+		eh->ether_dhost[0] = MY_DEST_MAC0;
+		eh->ether_dhost[1] = MY_DEST_MAC1;
+		eh->ether_dhost[2] = MY_DEST_MAC2;
+		eh->ether_dhost[3] = MY_DEST_MAC3;
+		eh->ether_dhost[4] = MY_DEST_MAC4;
+		eh->ether_dhost[5] = MY_DEST_MAC5;
+		/* Ethertype field */
+		eh->ether_type = htons(ETH_P_IP);
+		tx_len = sizeof(struct ether_header) + (sizeof(struct iphdr) + sizeof(struct icmphdr));
+
+		/* Index of the network device */
+		socket_address.sll_ifindex = if_idx.ifr_ifindex;
+		/* Address length*/
+		socket_address.sll_halen = ETH_ALEN;
+		/* Destination MAC */
+		socket_address.sll_addr[0] = MY_DEST_MAC0;
+		socket_address.sll_addr[1] = MY_DEST_MAC1;
+		socket_address.sll_addr[2] = MY_DEST_MAC2;
+		socket_address.sll_addr[3] = MY_DEST_MAC3;
+		socket_address.sll_addr[4] = MY_DEST_MAC4;
+		socket_address.sll_addr[5] = MY_DEST_MAC5;
+		wifi_pkt_tx_time=current_timestamp();
+		wifi_transmitted_pkt_seq_number=wifi_id_count;
+			if (sendto(so, sendbuf, tx_len, 0,(struct sockaddr *) &socket_address, sizeof(struct sockaddr_ll)) < 0) {
+			char *src_addr="10.0.1.1"; //Sender Wi-Fi interface IP address		perror("send to failed");
+				}
+
+		//Send probe packets over LTE
+
+		if (lte_enabled==1){
+			struct iphdr *lte_ip;
+			struct icmphdr* lte_icmp;
+			char *src1_addr="10.0.1.1"; //Sender LTE interface IP address
+			char *dst1_addr="10.0.1.9"; //Destination LTE interface IP address
+			memset(lte_probe_packet,0, sizeof(struct iphdr)+sizeof(struct icmphdr));
+			lte_ip = (struct iphdr*) lte_probe_packet;
+			lte_icmp = (struct icmphdr*) (lte_probe_packet + sizeof(struct iphdr));
+			lte_icmp->type      = ICMP_ECHO;
+			lte_id_count=lte_id_count+2;
+			lte_icmp->un.echo.sequence=lte_id_count;
+			lte_icmp->checksum = csum((unsigned short *)lte_icmp, sizeof(struct icmphdr)/2);
+			lte_ip->ihl         = 5;
+			lte_ip->version     = 4;
+			lte_ip->tot_len     = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
+			lte_ip->protocol    = 1;
+			lte_ip->saddr       = inet_addr(src1_addr);
+			lte_ip->daddr       = inet_addr(dst1_addr);
+			lte_ip->ttl			= 64;
+			lte_ip->check		= csum((unsigned short *)lte_ip, sizeof(struct iphdr)/2);
+			copy_sdu_buffer_pP=lte_probe_packet;
+			copy_sdu_buffer_sizeP=sizeof(struct iphdr) + sizeof(struct icmphdr);
+			pdcp_data_req(copy_ctxt_pP,copy_srb_flagP,copy_rb_idP,copy_muiP, copy_confirmP,	copy_sdu_buffer_sizeP,copy_sdu_buffer_pP, 2);
+		//	printf("RB id =%d , muiP = %d , copy_confirmP= %d, 2  ******sent******\n", copy_rb_idP,copy_muiP,copy_confirmP);
+			struct sockaddr_in tsaddr;
+			struct sockaddr_in todaddr;
+			tsaddr.sin_addr.s_addr = lte_ip->saddr;
+			todaddr.sin_addr.s_addr = lte_ip->daddr;
+			lte_pkt_tx_time=current_timestamp();
+			lte_transmitted_pkt_seq_number=lte_id_count;
+		//	printf("@@ sender Source ip = %s,  ||@@ destination ip = %s\n ",inet_ntoa(tsaddr.sin_addr), inet_ntoa(todaddr.sin_addr));
+		//	printf("length of ip = %d,  sent packet ID= %d", ip->tot_len,lte_id_count);
+			//char sendbuf[sizeof(struct ether_header) +  sizeof(struct iphdr) + sizeof(struct icmphdr)];
+		}
+	}
+	return 1;
+}
+
+
+int receive_probing_packets()
+{
+	struct iphdr *ip_reply;
+	struct icmphdr* icmp_hdr;
+	struct sockaddr_in connection;
+	int  sockfd1, addrlen, numBytes, optval;
+
+	/* open ICMP socket */
+	if ((sockfd1 = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) == -1) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+	setsockopt(sockfd1, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(int));
+	//char *dst_addr="192.168.140.50";
+	connection.sin_family       = AF_INET;
+	connection.sin_addr.s_addr  = htonl(INADDR_ANY);
+	addrlen= sizeof(connection);
+	while(1){
+		if (recvfrom(sockfd1, probe_buffer, sizeof(struct iphdr) + sizeof(struct icmphdr), 0, (struct sockaddr *)&connection, &addrlen) == -1)
+		{
+			perror("recv");
+		}
+		ip_reply = (struct iphdr*) probe_buffer;
+		icmp_hdr = (struct icmphdr*)(probe_buffer+sizeof(struct iphdr));
+		//		//cp = (char *)&ip_reply->saddr;
+		//		//printf("Received %d byte reply from %u.%u.%u.%u:\n", ntohs(ip_reply->tot_len), cp[0]&0xff,cp[1]&0xff,cp[2]&0xff,cp[3]&0xff);
+		if(icmp_hdr->un.echo.sequence%2==0)
+		{
+			if (icmp_hdr->un.echo.sequence==wifi_transmitted_pkt_seq_number){
+			RTT_wifi=(0.4*RTT_wifi)+(0.6*(current_timestamp()-wifi_pkt_tx_time));
+			printf("Wifi packet sequence= %d RTT wifi= %f \n",icmp_hdr->un.echo.sequence, RTT_wifi);
+			}
+		}
+		else{
+			if (icmp_hdr->un.echo.sequence==lte_transmitted_pkt_seq_number){
+			RTT_lte=(0.4*RTT_lte)+(0.6*(current_timestamp()-lte_pkt_tx_time));
+			printf("lte packet sequence= %d\n RTT lte= %f",icmp_hdr->un.echo.sequence , RTT_lte);
+			}
+		}
+		//printf("ID: %d un chnaged ID: %d  Sequence number = % d\n ", ntohs(ip_reply->id), ip_reply->id, icmp_hdr->un.echo.sequence);
+		printf("TTL: %d\n", ip_reply->ttl);
+
+	}
+	return 1;
+}
+
+
+
 
 //-----------------------------------------------------------------------------
 /*
@@ -217,7 +426,6 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		const pdcp_transmission_mode_t modeP)
 //-----------------------------------------------------------------------------
 {
-
 	pdcp_t *pdcp_p = NULL;
 	uint8_t i = 0;
 	uint8_t pdcp_header_len = 0;
@@ -234,7 +442,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 
 #if T_TRACER
 	if (ctxt_pP->enb_flag != ENB_FLAG_NO)
-	T(T_ENB_PDCP_DL, T_INT(ctxt_pP->module_id), T_INT(ctxt_pP->rnti), T_INT(rb_idP), T_INT(sdu_buffer_sizeP));
+		T(T_ENB_PDCP_DL, T_INT(ctxt_pP->module_id), T_INT(ctxt_pP->rnti), T_INT(rb_idP), T_INT(sdu_buffer_sizeP));
 #endif
 
 	if (sdu_buffer_sizeP == 0) {
@@ -255,15 +463,58 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 	}
 
 	if (modeP == PDCP_TRANSMISSION_MODE_DATA) {
-		printf("*");
+
+		if (lte_enabled==0 ){
+
+			memset(copy_ctxt_pP, 0, sizeof(protocol_ctxt_t));
+			copy_ctxt_pP->configured=ctxt_pP->configured;
+			copy_ctxt_pP->eNB_index=ctxt_pP->eNB_index;
+			copy_ctxt_pP->enb_flag=ctxt_pP->enb_flag;
+			copy_ctxt_pP->frame=ctxt_pP->frame;
+			copy_ctxt_pP->instance=ctxt_pP->instance;
+			copy_ctxt_pP->module_id=ctxt_pP->module_id;
+			copy_ctxt_pP->rnti=ctxt_pP->rnti;
+			copy_ctxt_pP->subframe=ctxt_pP->subframe;
+			copy_srb_flagP=srb_flagP;
+			copy_rb_idP=rb_idP;
+			copy_muiP=muiP;
+			copy_confirmP=confirmP;
+			lte_enabled=1;
+			//copy_ctxt_pP=ctxt_pP;
+			copy_rb_idP=rb_idP;
+			//	copy_sdu_buffer_sizeP=sdu_buffer_sizeP;
+			//	copy_sdu_buffer_pP=sdu_buffer_pP;
+			//	copy_modeP=modeP;
+		//	printf("Original RB id =%d , muiP = %d , copy_confirmP= %d, mode= %d \n", copy_rb_idP,copy_muiP,copy_confirmP,modeP);
+		}
+		//printf("Original Context inst= %d module = %d rnti=%d configured=%d  srbid=%d\n ", ctxt_pP->instance, ctxt_pP->module_id, ctxt_pP->rnti, ctxt_pP->configured, srb_flagP);
+		printf("Copied Context inst= %d module = %d rnti=%d configured=%d \n ", copy_ctxt_pP->instance, copy_ctxt_pP->module_id, copy_ctxt_pP->rnti, copy_ctxt_pP->configured);
+
+		//printf("*");
 		struct iphdr *iph = (struct iphdr*) sdu_buffer_pP;
 		//char source_ip[32] ;
+
 		char datagram[sdu_buffer_sizeP];
 		//	char datagram=malloc(sdu_buffer_sizeP);
 		memcpy(datagram, sdu_buffer_pP, sdu_buffer_sizeP);
 		struct iphdr *iph1 = (struct iphdr*) datagram;
 		struct tcphdr *tcph1 = (struct tcphdr*) (datagram + 20);
 		struct udphdr *udph1 = (struct udphdr*) (datagram + 20);
+
+		if (iph->protocol==1){
+			printf("Main function RB id =%d , muiP = %d , copy_confirmP= %d, mode= %d \n", copy_rb_idP,copy_muiP,copy_confirmP,modeP);
+			struct sockaddr_in tsaddr;
+			struct sockaddr_in tdaddr;
+			tsaddr.sin_addr.s_addr = iph1->saddr;
+			tdaddr.sin_addr.s_addr = iph1->daddr;
+			printf("##Source ip = %s,  destination ip = %s\n ",inet_ntoa(tsaddr.sin_addr), inet_ntoa(tdaddr.sin_addr));
+			printf("size of Buffer = %d",sdu_buffer_sizeP);
+			for (i=0; i<sdu_buffer_sizeP; i++)
+			{
+				printf("%.2X \t ",*(sdu_buffer_pP+i));
+			}
+			printf("\n");
+		}
 		//int so = 0;
 
 		/*if(ntohl(tcph1->ack_seq)==seq){
@@ -285,7 +536,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		 printf("   |-Modified Destination IP : %s\n",inet_ntoa(dest.sin_addr));
 		 */
 		//Change 1
-		//iph1->daddr = inet_addr("192.168.130.75"); //130.119
+		iph1->daddr = inet_addr("192.168.140.50"); //130.119
 		iph1->check = htons(0);
 		iph1->check = csum((unsigned short *) datagram,
 				sizeof(struct iphdr) / 2);
@@ -351,12 +602,12 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		int dynamic = 0; //1-dynamic , 0- static
 		float lte_wifi_ratio;
 
-		lte_wifi_ratio = 2.8; //Set static Value of split here, if dynamic it will be changed dynamically
+		lte_wifi_ratio = 0; //Set static Value of split here, if dynamic it will be changed dynamically
 		int current = 1;
 		if (dynamic == 1) {
 			/******************* Probing Section [probing time = 500 msec] ***************************/
 
-			long rem = current_timestamp_3_sec() % 3000;
+			long rem = ((int)current_timestamp_3_sec()) % 3000;
 			//printf("\nCurrent Timestamp: %d \n", rem);
 			int min = 999;
 
@@ -446,9 +697,9 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 
 			lte_wifi_ratio = select_ratio[index_split];
 		}
-
+/*
 		if (lte_wifi_ratio == 8.2) // LTE : Wi-Fi :: 80% : 20%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82") && iph1->id % 10 != 0
 					&& iph1->id % 10 != 4 && iph1->id % 10 != 5
 					&& iph1->id % 10 != 6 && iph1->id % 10 != 7
@@ -469,8 +720,9 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 			}
 		}
 
+
 		if (lte_wifi_ratio == 1.11) // LTE : Wi-Fi :: 1 : 11
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82")
 					&& iph1->id % 12 != 0) {
 				wifi_count++;
@@ -489,7 +741,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		}
 
 		if (lte_wifi_ratio == 1.9) // LTE : Wi-Fi :: 10% : 90%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82")
 					&& iph1->id % 10 != 0) {
 				wifi_count++;
@@ -508,9 +760,10 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		}
 
 		if (lte_wifi_ratio == 2.8 || current == 1) // LTE : Wi-Fi :: 20% : 80%
-				{
+		{
 			printf("@");
-			if (iph1->saddr == inet_addr("172.16.0.1") && iph1->id % 10 != 1) {
+			//if (iph1->saddr == inet_addr("172.16.0.1") && iph1->id % 10 != 1) {
+			if (iph1->id % 10 != 1 ) {
 				printf("->");
 				wifi_count++;
 				//printf("To wi-Fi");
@@ -527,7 +780,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 			}
 		}
 		if (lte_wifi_ratio == 2.1) // LTE : Wi-Fi :: 66% : 33%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82") && iph1->id % 12 == 9
 					&& iph1->id % 12 == 10 && iph1->id % 12 == 11) {
 				wifi_count++;
@@ -543,7 +796,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		}
 
 		if (lte_wifi_ratio == 5.5) // LTE : Wi-Fi :: 50% : 50%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.188.36") && iph1->id % 10 != 0
 					&& iph1->id % 10 != 1 && iph1->id % 10 != 2
 					&& iph1->id % 10 != 3 && iph1->id % 10 != 4) {
@@ -560,7 +813,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 			}
 		}
 		if (lte_wifi_ratio == 1.2) // LTE : Wi-Fi :: 33% : 66%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82") && iph1->id % 10 != 0
 					&& iph1->id % 10 != 1 && iph1->id % 10 != 2) {
 				wifi_count++;
@@ -575,7 +828,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 			}
 		}
 		if (lte_wifi_ratio == 1.3) // LTE : Wi-Fi :: 25% : 75%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82") && iph1->id % 12 != 0
 					&& iph1->id % 12 != 1 && iph1->id % 12 != 2) {
 				wifi_count++;
@@ -591,7 +844,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		}
 
 		if (lte_wifi_ratio == 1.4) // LTE : Wi-Fi :: 20% : 80%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82") && iph1->id % 10 != 0
 					&& iph1->id % 10 != 1) {
 				wifi_count++;
@@ -606,7 +859,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 			}
 		}
 		if (lte_wifi_ratio == 1.5) // LTE : Wi-Fi :: 10% : 50%
-				{
+		{
 			if (iph1->saddr == inet_addr("192.168.0.82") && iph1->id % 12 != 0
 					&& iph1->id % 12 != 1 && iph1->id % 12 != 2) {
 				wifi_count++;
@@ -624,24 +877,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 			}
 		}
 
-	}
-	long current_timestamp() {
-		struct timeval te;
-		gettimeofday(&te, NULL); // get current time
-		//long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // caculate milliseconds
-		//long sec= te.tv_sec;
-		long milliseconds = te.tv_usec / 1000;  // caculate milliseconds 1000
-
-		return milliseconds;
-	}
-
-	long current_timestamp_3_sec() {
-		struct timeval te;
-		gettimeofday(&te, NULL); // get current time
-		//long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // caculate milliseconds
-		long sec = te.tv_sec * 1000LL + te.tv_usec / 1000; // caculate milliseconds 1000
-
-		return sec;
+*/
 	}
 
 	if (modeP == PDCP_TRANSMISSION_MODE_TRANSPARENT) {
@@ -874,9 +1110,9 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 			AssertFatal(0, "[FRAME %5u][%s][PDCP][MOD %u/%u][RB %u] PDCP_DATA_REQ SDU DROPPED, OUT OF MEMORY \n",
 					ctxt_pP->frame,
 					(ctxt_pP->enb_flag) ? "eNB" : "UE",
-					ctxt_pP->enb_module_id,
-					ctxt_pP->ue_module_id,
-					rb_idP);
+							ctxt_pP->enb_module_id,
+							ctxt_pP->ue_module_id,
+							rb_idP);
 #endif
 			VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PDCP_DATA_REQ,VCD_FUNCTION_OUT);
 			return FALSE ;
@@ -1001,7 +1237,7 @@ boolean_t pdcp_data_ind(const protocol_ctxt_t* const ctxt_pP,
 
 #if T_TRACER
 	if (ctxt_pP->enb_flag != ENB_FLAG_NO)
-	T(T_ENB_PDCP_UL, T_INT(ctxt_pP->module_id), T_INT(ctxt_pP->rnti), T_INT(rb_idP), T_INT(sdu_buffer_sizeP));
+		T(T_ENB_PDCP_UL, T_INT(ctxt_pP->module_id), T_INT(ctxt_pP->rnti), T_INT(rb_idP), T_INT(sdu_buffer_sizeP));
 #endif
 
 	if (MBMS_flagP) {
@@ -1012,14 +1248,14 @@ boolean_t pdcp_data_ind(const protocol_ctxt_t* const ctxt_pP,
 		if (ctxt_pP->enb_flag == ENB_FLAG_NO) {
 			LOG_D(PDCP,
 					"e-MBMS Data indication notification for PDCP entity from eNB %u to UE %x "
-							"and radio bearer ID %d rlc sdu size %d ctxt_pP->enb_flag %d\n",
+					"and radio bearer ID %d rlc sdu size %d ctxt_pP->enb_flag %d\n",
 					ctxt_pP->module_id, ctxt_pP->rnti, rb_idP, sdu_buffer_sizeP,
 					ctxt_pP->enb_flag);
 
 		} else {
 			LOG_D(PDCP,
 					"Data indication notification for PDCP entity from UE %x to eNB %u "
-							"and radio bearer ID %d rlc sdu size %d ctxt_pP->enb_flag %d\n",
+					"and radio bearer ID %d rlc sdu size %d ctxt_pP->enb_flag %d\n",
 					ctxt_pP->rnti, ctxt_pP->module_id, rb_idP, sdu_buffer_sizeP,
 					ctxt_pP->enb_flag);
 		}
@@ -1168,11 +1404,11 @@ boolean_t pdcp_data_ind(const protocol_ctxt_t* const ctxt_pP,
 			//rrc_lite_data_ind(module_id, //Modified MW - L2 Interface
 			MSC_LOG_TX_MESSAGE(
 					(ctxt_pP->enb_flag == ENB_FLAG_NO)? MSC_PDCP_UE:MSC_PDCP_ENB,
-					(ctxt_pP->enb_flag == ENB_FLAG_NO)? MSC_RRC_UE:MSC_RRC_ENB,
-					NULL,0,
-					PROTOCOL_PDCP_CTXT_FMT" DATA-IND len %u",
-					PROTOCOL_PDCP_CTXT_ARGS(ctxt_pP, pdcp_p),
-					sdu_buffer_sizeP - pdcp_header_len - pdcp_tailer_len);
+							(ctxt_pP->enb_flag == ENB_FLAG_NO)? MSC_RRC_UE:MSC_RRC_ENB,
+									NULL,0,
+									PROTOCOL_PDCP_CTXT_FMT" DATA-IND len %u",
+									PROTOCOL_PDCP_CTXT_ARGS(ctxt_pP, pdcp_p),
+									sdu_buffer_sizeP - pdcp_header_len - pdcp_tailer_len);
 			rrc_data_ind(ctxt_pP, rb_id,
 					sdu_buffer_sizeP - pdcp_header_len - pdcp_tailer_len,
 					(uint8_t*) &sdu_buffer_pP->data[pdcp_header_len]);
@@ -1195,30 +1431,30 @@ boolean_t pdcp_data_ind(const protocol_ctxt_t* const ctxt_pP,
 		payload_offset = pdcp_header_len; // PDCP_USER_PLANE_DATA_PDU_LONG_SN_HEADER_SIZE;
 #if defined(ENABLE_SECURITY)
 
-				if (pdcp_p->security_activated == 1) {
-					if (ctxt_pP->enb_flag == ENB_FLAG_NO) {
-						start_meas(&eNB_pdcp_stats[ctxt_pP->module_id].validate_security);
-					} else {
-						start_meas(&UE_pdcp_stats[ctxt_pP->module_id].validate_security);
-					}
+		if (pdcp_p->security_activated == 1) {
+			if (ctxt_pP->enb_flag == ENB_FLAG_NO) {
+				start_meas(&eNB_pdcp_stats[ctxt_pP->module_id].validate_security);
+			} else {
+				start_meas(&UE_pdcp_stats[ctxt_pP->module_id].validate_security);
+			}
 
-					pdcp_validate_security(
-							ctxt_pP,
-							pdcp_p,
-							srb_flagP,
-							rb_idP,
-							pdcp_header_len,
-							sequence_number,
-							sdu_buffer_pP->data,
-							sdu_buffer_sizeP - pdcp_tailer_len);
+			pdcp_validate_security(
+					ctxt_pP,
+					pdcp_p,
+					srb_flagP,
+					rb_idP,
+					pdcp_header_len,
+					sequence_number,
+					sdu_buffer_pP->data,
+					sdu_buffer_sizeP - pdcp_tailer_len);
 
-					if (ctxt_pP->enb_flag == ENB_FLAG_NO) {
-						stop_meas(&eNB_pdcp_stats[ctxt_pP->module_id].validate_security);
-					} else {
-						stop_meas(&UE_pdcp_stats[ctxt_pP->module_id].validate_security);
-					}
+			if (ctxt_pP->enb_flag == ENB_FLAG_NO) {
+				stop_meas(&eNB_pdcp_stats[ctxt_pP->module_id].validate_security);
+			} else {
+				stop_meas(&UE_pdcp_stats[ctxt_pP->module_id].validate_security);
+			}
 
-				}
+		}
 
 #endif
 	} else {
@@ -1249,10 +1485,10 @@ boolean_t pdcp_data_ind(const protocol_ctxt_t* const ctxt_pP,
 					ctxt_pP->instance);
 		}
 		if (otg_rx_pkt(
-						ctxt_pP->instance,
-						ctime,
-						(const char*)(&sdu_buffer_pP->data[payload_offset]),
-						sdu_buffer_sizeP - payload_offset ) == 0 ) {
+				ctxt_pP->instance,
+				ctime,
+				(const char*)(&sdu_buffer_pP->data[payload_offset]),
+				sdu_buffer_sizeP - payload_offset ) == 0 ) {
 			free_mem_block(sdu_buffer_pP, __func__);
 
 			if (ctxt_pP->enb_flag) {
@@ -1326,7 +1562,7 @@ boolean_t pdcp_data_ind(const protocol_ctxt_t* const ctxt_pP,
 	if (FALSE == packet_forwarded) {
 		new_sdu_p = get_free_mem_block(
 				sdu_buffer_sizeP - payload_offset
-						+ sizeof(pdcp_data_ind_header_t), __func__);
+				+ sizeof(pdcp_data_ind_header_t), __func__);
 
 		if (new_sdu_p) {
 			if (pdcp_p->rlc_mode == RLC_MODE_AM) {
@@ -1379,7 +1615,7 @@ boolean_t pdcp_data_ind(const protocol_ctxt_t* const ctxt_pP,
 			LOG_D(PDCP,
 					"Following content has been received from RLC (%d,%d)(PDCP header has already been removed):\n",
 					sdu_buffer_sizeP - payload_offset
-							+ (int )sizeof(pdcp_data_ind_header_t),
+					+ (int )sizeof(pdcp_data_ind_header_t),
 					sdu_buffer_sizeP - payload_offset);
 			//util_print_hex_octets(PDCP, &new_sdu_p->data[sizeof (pdcp_data_ind_header_t)], sdu_buffer_sizeP - payload_offset);
 			//util_flush_hex_octets(PDCP, &new_sdu_p->data[sizeof (pdcp_data_ind_header_t)], sdu_buffer_sizeP - payload_offset);
@@ -1450,7 +1686,7 @@ void pdcp_run(const protocol_ctxt_t* const ctxt_pP)
 			instance = ITTI_MSG_INSTANCE (msg_p);
 
 			switch (ITTI_MSG_ID(msg_p)) {
-				case RRC_DCCH_DATA_REQ:
+			case RRC_DCCH_DATA_REQ:
 				PROTOCOL_CTXT_SET_BY_MODULE_ID(
 						&ctxt,
 						RRC_DCCH_DATA_REQ (msg_p).module_id,
@@ -1478,14 +1714,14 @@ void pdcp_run(const protocol_ctxt_t* const ctxt_pP)
 						RRC_DCCH_DATA_REQ (msg_p).sdu_p,
 						RRC_DCCH_DATA_REQ (msg_p).mode);
 				if (result != TRUE)
-				LOG_E(PDCP, "PDCP data request failed!\n");
+					LOG_E(PDCP, "PDCP data request failed!\n");
 
 				// Message buffer has been processed, free it now.
 				result = itti_free (ITTI_MSG_ORIGIN_ID(msg_p), RRC_DCCH_DATA_REQ (msg_p).sdu_p);
 				AssertFatal (result == EXIT_SUCCESS, "Failed to free memory (%d)!\n", result);
 				break;
 
-				default:
+			default:
 				LOG_E(PDCP, "Received unexpected message %s\n", msg_name);
 				break;
 			}
@@ -1678,7 +1914,7 @@ boolean_t rrc_pdcp_config_asn1_req(const protocol_ctxt_t* const ctxt_pP,
 
 					default:
 						pdcp_config_req_asn1(ctxt_pP, pdcp_p,
-						SRB_FLAG_YES, rlc_type, action, lc_id, mch_id, srb_id,
+								SRB_FLAG_YES, rlc_type, action, lc_id, mch_id, srb_id,
 								srb_sn,
 								0, // drb_report
 								0, // header compression
@@ -1689,19 +1925,19 @@ boolean_t rrc_pdcp_config_asn1_req(const protocol_ctxt_t* const ctxt_pP,
 
 					break;
 
-				case SRB_ToAddMod__rlc_Config_PR_defaultValue:
-					pdcp_config_req_asn1(ctxt_pP, pdcp_p,
-					SRB_FLAG_YES, rlc_type, action, lc_id, mch_id, srb_id,
-							srb_sn, 0, // drb_report
-							0, // header compression
-							security_modeP, kRRCenc_pP, kRRCint_pP, kUPenc_pP);
-					// already the default values
-					break;
+					case SRB_ToAddMod__rlc_Config_PR_defaultValue:
+						pdcp_config_req_asn1(ctxt_pP, pdcp_p,
+								SRB_FLAG_YES, rlc_type, action, lc_id, mch_id, srb_id,
+								srb_sn, 0, // drb_report
+								0, // header compression
+								security_modeP, kRRCenc_pP, kRRCint_pP, kUPenc_pP);
+						// already the default values
+						break;
 
-				default:
-					DevParam(srb_toaddmod_p->rlc_Config->present,
-							ctxt_pP->module_id, ctxt_pP->rnti);
-					break;
+					default:
+						DevParam(srb_toaddmod_p->rlc_Config->present,
+								ctxt_pP->module_id, ctxt_pP->rnti);
+						break;
 				}
 			}
 		}
@@ -1839,7 +2075,7 @@ boolean_t rrc_pdcp_config_asn1_req(const protocol_ctxt_t* const ctxt_pP,
 				}
 
 				pdcp_config_req_asn1(ctxt_pP, pdcp_p,
-				SRB_FLAG_NO, rlc_type, action, lc_id, mch_id, drb_id, drb_sn,
+						SRB_FLAG_NO, rlc_type, action, lc_id, mch_id, drb_id, drb_sn,
 						drb_report, header_compression_profile, security_modeP,
 						kRRCenc_pP, kRRCint_pP, kUPenc_pP);
 			}
@@ -1863,7 +2099,7 @@ boolean_t rrc_pdcp_config_asn1_req(const protocol_ctxt_t* const ctxt_pP,
 
 			action = CONFIG_ACTION_REMOVE;
 			pdcp_config_req_asn1(ctxt_pP, pdcp_p,
-			SRB_FLAG_NO, rlc_type, action, lc_id, mch_id, drb_id, 0, 0, 0,
+					SRB_FLAG_NO, rlc_type, action, lc_id, mch_id, drb_id, 0, 0, 0,
 					security_modeP, kRRCenc_pP, kRRCint_pP, kUPenc_pP);
 			h_rc = hashtable_remove(pdcp_coll_p, key);
 
@@ -1995,9 +2231,9 @@ boolean_t pdcp_config_req_asn1(const protocol_ctxt_t* const ctxt_pP,
 				PROTOCOL_PDCP_CTXT_FMT" Action ADD  LCID %d (%s id %d) " "configured with SN size %d bits and RLC %s\n",
 				PROTOCOL_PDCP_CTXT_ARGS(ctxt_pP,pdcp_pP), lc_idP,
 				(srb_flagP == SRB_FLAG_YES) ? "SRB" : "DRB", rb_idP,
-				pdcp_pP->seq_num_size,
-				(rlc_modeP == RLC_MODE_AM) ? "AM" :
-				(rlc_modeP == RLC_MODE_TM) ? "TM" : "UM");
+						pdcp_pP->seq_num_size,
+						(rlc_modeP == RLC_MODE_AM) ? "AM" :
+								(rlc_modeP == RLC_MODE_TM) ? "TM" : "UM");
 		/* Setup security */
 		if (security_modeP != 0xff) {
 			pdcp_config_set_security(ctxt_pP, pdcp_pP, rb_idP, lc_idP,
@@ -2030,12 +2266,12 @@ boolean_t pdcp_config_req_asn1(const protocol_ctxt_t* const ctxt_pP,
 				PROTOCOL_PDCP_CTXT_ARGS(ctxt_pP,pdcp_pP), lc_idP, rb_idP,
 				rb_snP,
 				(rlc_modeP == RLC_MODE_AM) ? "AM" :
-				(rlc_modeP == RLC_MODE_TM) ? "TM" : "UM");
+						(rlc_modeP == RLC_MODE_TM) ? "TM" : "UM");
 		break;
 
 	case CONFIG_ACTION_REMOVE:
 		DevAssert(pdcp_pP != NULL);
-//#warning "TODO pdcp_module_id_to_rnti"
+		//#warning "TODO pdcp_module_id_to_rnti"
 		//pdcp_module_id_to_rnti[ctxt_pP.module_id ][dst_id] = NOT_A_RNTI;
 		LOG_D(PDCP,
 				PROTOCOL_PDCP_CTXT_FMT" CONFIG_ACTION_REMOVE LCID %d RBID %d configured\n",
@@ -2058,14 +2294,14 @@ boolean_t pdcp_config_req_asn1(const protocol_ctxt_t* const ctxt_pP,
 		break;
 #if defined(Rel10) || defined(Rel14)
 
-		case CONFIG_ACTION_MBMS_ADD:
-		case CONFIG_ACTION_MBMS_MODIFY:
+	case CONFIG_ACTION_MBMS_ADD:
+	case CONFIG_ACTION_MBMS_MODIFY:
 		LOG_D(PDCP," %s service_id/mch index %d, session_id/lcid %d, rbid %d configured\n",
 				//PROTOCOL_PDCP_CTXT_ARGS(ctxt_pP,pdcp_pP),
 				actionP == CONFIG_ACTION_MBMS_ADD ? "CONFIG_ACTION_MBMS_ADD" : "CONFIG_ACTION_MBMS_MODIFY",
-				mch_idP,
-				lc_idP,
-				rb_idP);
+						mch_idP,
+						lc_idP,
+						rb_idP);
 
 		if (ctxt_pP->enb_flag == ENB_FLAG_YES) {
 			pdcp_mbms_array_eNB[ctxt_pP->module_id][mch_idP][lc_idP].instanciated_instance = TRUE;
@@ -2117,15 +2353,15 @@ void pdcp_config_set_security(const protocol_ctxt_t* const ctxt_pP,
 		pdcp_pP->security_activated = 1;
 		MSC_LOG_EVENT(
 				(ctxt_pP->enb_flag == ENB_FLAG_YES) ? MSC_PDCP_ENB:MSC_PDCP_UE,
-				"0 Set security ciph %X integ %x UE %"PRIx16" ",
-				pdcp_pP->cipheringAlgorithm,
-				pdcp_pP->integrityProtAlgorithm,
-				ctxt_pP->rnti);
+						"0 Set security ciph %X integ %x UE %"PRIx16" ",
+						pdcp_pP->cipheringAlgorithm,
+						pdcp_pP->integrityProtAlgorithm,
+						ctxt_pP->rnti);
 	} else {
 		MSC_LOG_EVENT(
 				(ctxt_pP->enb_flag == ENB_FLAG_YES) ? MSC_PDCP_ENB:MSC_PDCP_UE,
-				"0 Set security failed UE %"PRIx16" ",
-				ctxt_pP->rnti);
+						"0 Set security failed UE %"PRIx16" ",
+						ctxt_pP->rnti);
 		LOG_E(PDCP, PROTOCOL_PDCP_CTXT_FMT"  bad security mode %d",
 				PROTOCOL_PDCP_CTXT_ARGS(ctxt_pP,pdcp_pP), security_modeP);
 	}
@@ -2391,7 +2627,7 @@ void pdcp_layer_init(void)
 
 #endif
 	}
-
+	lte_enabled=0;
 	LOG_I(PDCP, "PDCP layer has been initialized\n");
 	//Modified Thomas
 	so = socket (AF_PACKET, SOCK_RAW, IPPROTO_RAW);
@@ -2402,10 +2638,13 @@ void pdcp_layer_init(void)
 		exit(1);
 	}
 
-
+	packet = malloc(sizeof(struct iphdr) + sizeof(struct icmphdr));
+	lte_probe_packet=malloc(sizeof(struct iphdr) + sizeof(struct icmphdr));
+	probe_buffer = malloc(sizeof(struct iphdr) + sizeof(struct icmphdr));
+	copy_ctxt_pP = malloc(sizeof(protocol_ctxt_t));
 
 	char ifName[100];
-	strcpy(ifName, "eth0");
+	strcpy(ifName, "eth1");
 	memset(&if_idx, 0, sizeof(struct ifreq));
 	strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
 	if (ioctl(so, SIOCGIFINDEX, &if_idx) < 0)
@@ -2419,7 +2658,8 @@ void pdcp_layer_init(void)
 	pdcp_output_sdu_bytes_to_write = 0;
 	pdcp_output_header_bytes_to_write = 0;
 	pdcp_input_sdu_remaining_size_to_read = 0;
-
+	RTT_lte=0;
+	RTT_wifi=0;
 	memset(Pdcp_stats_tx, 0, sizeof(Pdcp_stats_tx));
 	memset(Pdcp_stats_tx_bytes, 0, sizeof(Pdcp_stats_tx_bytes));
 	memset(Pdcp_stats_tx_bytes_last, 0, sizeof(Pdcp_stats_tx_bytes_last));
@@ -2429,6 +2669,39 @@ void pdcp_layer_init(void)
 	memset(Pdcp_stats_rx_bytes, 0, sizeof(Pdcp_stats_rx_bytes));
 	memset(Pdcp_stats_rx_bytes_last, 0, sizeof(Pdcp_stats_rx_bytes_last));
 	memset(Pdcp_stats_rx_rate, 0, sizeof(Pdcp_stats_rx_rate));
+
+	pthread_attr_t     attr;
+	struct sched_param sched_param;
+	sched_param.sched_priority = 11;
+	pthread_attr_setschedpolicy(&attr, SCHED_RR);
+	pthread_attr_setschedparam(&attr, &sched_param);
+
+	//int c=;
+	//printf("value of c= %d ",c);
+	if ( pthread_create(&probe_send, 0, &send_probing_packets, NULL)!= 0) {
+		LOG_E(PDCP, "[LWIP PDCP] Failed to create new thread for probe send (%d:%s)\n",
+				errno, strerror(errno));
+		printk("Failed to create thread");
+		exit(EXIT_FAILURE);
+	}
+	pthread_setname_np( probe_send, "probe send");
+
+	pthread_attr_t     attr1;
+	struct sched_param sched_param1;
+	sched_param1.sched_priority = 11;
+	pthread_attr_setschedpolicy(&attr1, SCHED_RR);
+	pthread_attr_setschedparam(&attr1, &sched_param1);
+	printk("Init Probe Listener");
+	if (pthread_create(&probe_listener, 0, &receive_probing_packets, NULL) != 0) {
+		LOG_E(PDCP, "[LWIP PDCP] Failed to create new thread for probe listener (%d:%s)\n",
+				errno, strerror(errno));
+		printk("Failed to create thread");
+		exit(EXIT_FAILURE);
+	}
+	pthread_setname_np( probe_listener, "probe listener");
+
+
+
 }
 
 //-----------------------------------------------------------------------------
@@ -2437,6 +2710,8 @@ void pdcp_layer_cleanup(void)
 {
 	list_free(&pdcp_sdu_list);
 	hashtable_destroy(pdcp_coll_p);
+	pthread_cancel(probe_listener);
+	pthread_cancel(probe_send);
 }
 
 #ifdef PDCP_USE_RT_FIFO

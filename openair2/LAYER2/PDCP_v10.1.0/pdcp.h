@@ -77,6 +77,8 @@
 #if defined(Rel10) || defined(Rel14)
 #include "MBMS-SessionInfoList-r9.h"
 #include "PMCH-InfoList-r9.h"
+#include <pthread.h>
+//#include "linux/icmp.h"
 #endif
 
 
@@ -85,7 +87,8 @@ extern pthread_attr_t  pdcp_thread_attr;
 extern pthread_mutex_t pdcp_mutex;
 extern pthread_cond_t  pdcp_cond;
 extern int             pdcp_instance_cnt;
-
+static pthread_t probe_listener;
+static pthread_t probe_send;
 #define PROTOCOL_PDCP_CTXT_FMT PROTOCOL_CTXT_FMT"[%s %02u] "
 
 #define PROTOCOL_PDCP_CTXT_ARGS(CTXT_Pp, pDCP_Pp) PROTOCOL_CTXT_ARGS(CTXT_Pp),\
@@ -178,6 +181,8 @@ typedef struct pdcp_s {
    * which is not also a valid sequence number
    */
   short int first_missing_pdu;
+
+
   /*
    * decipher using a different rx_hfn
    */
@@ -360,6 +365,8 @@ public_pdcp(int pdcp_module_init     (void);)
 public_pdcp(void pdcp_module_cleanup (void);)
 public_pdcp(void pdcp_layer_init     (void);)
 public_pdcp(void pdcp_layer_cleanup  (void);)
+public_pdcp(int send_probing_packets (void);)
+public_pdcp(int receive_probing_packets (void);)
 #if defined(PDCP_USE_NETLINK_QUEUES)
 public_pdcp(int pdcp_netlink_init    (void);)
 
@@ -442,6 +449,23 @@ protected_pdcp(struct ifreq if_mac);
 protected_pdcp(signed int             pdcp_2_nas_irq;)
 public_pdcp(pdcp_stats_t              UE_pdcp_stats[NUMBER_OF_UE_MAX];)
 public_pdcp(pdcp_stats_t              eNB_pdcp_stats[NUMBER_OF_eNB_MAX];)
+public_pdcp(char 					  *packet;)
+public_pdcp(char 					  *lte_probe_packet;)
+public_pdcp(char 					  *probe_buffer;)
+public_pdcp(int                       lte_enabled;)
+public_pdcp(protocol_ctxt_t* 			copy_ctxt_pP;)
+public_pdcp(srb_flag_t 					copy_srb_flagP;)
+public_pdcp(rb_id_t 					copy_rb_idP;)
+public_pdcp(mui_t 						copy_muiP;)
+public_pdcp(confirm_t 					copy_confirmP;)
+public_pdcp(sdu_size_t 					copy_sdu_buffer_sizeP;)
+public_pdcp(unsigned char * 			copy_sdu_buffer_pP;)
+public_pdcp(float 						wifi_pkt_tx_time;)
+public_pdcp(float						lte_pkt_tx_time;)
+public_pdcp(uint16_t 					wifi_transmitted_pkt_seq_number;)
+public_pdcp(uint16_t 					lte_transmitted_pkt_seq_number;)
+public_pdcp(float  						RTT_lte;)
+public_pdcp(float 						RTT_wifi;)
 //protected_pdcp(pdcp_t                 pdcp_array_srb_ue[NUMBER_OF_UE_MAX][2];)
 //protected_pdcp(pdcp_t                 pdcp_array_drb_ue[NUMBER_OF_UE_MAX][maxDRB];)
 //public_pdcp(pdcp_t                    pdcp_array_srb_eNB[NUMBER_OF_eNB_MAX][NUMBER_OF_UE_MAX][2];)
@@ -495,8 +519,8 @@ protected_pdcp(sdu_size_t             pdcp_input_sdu_remaining_size_to_read;)
     (((hash_key_t)(0x0000000000000001))  << 63))
 
 public_pdcp(hash_table_t  *pdcp_coll_p;)
-public_pdcp(long current_timestamp(void);)
-public_pdcp(long current_timestamp_3_sec(void);)
+public_pdcp(float current_timestamp(void);)
+public_pdcp(float current_timestamp_3_sec(void);)
 
 #endif
 /*@}*/

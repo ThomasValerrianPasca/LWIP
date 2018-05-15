@@ -38,7 +38,7 @@ ________________________________________________________________*/
 
 #include "COMMON/openair_types.h"
 #include "MAC/extern.h"
-
+#include <pthread.h>
 #include <linux/module.h>
 
 #ifndef USER_MODE
