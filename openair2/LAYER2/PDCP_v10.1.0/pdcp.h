@@ -108,6 +108,8 @@ public_pdcp(unsigned int Pdcp_stats_rx_bytes_last[NB_MODULES_MAX][NB_CNX_CH][NB_
 public_pdcp(unsigned int Pdcp_stats_rx_rate[NB_MODULES_MAX][NB_CNX_CH][NB_RAB_MAX]);
 protected_pdcp(int lte_count);
 protected_pdcp(int wifi_count);
+protected_pdcp(int window_size);
+protected_pdcp(int local_tcp_counter);
 typedef struct pdcp_stats_s {
   time_stats_t pdcp_run;
   time_stats_t data_req;

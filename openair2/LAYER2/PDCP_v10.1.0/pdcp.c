@@ -393,17 +393,17 @@ int receive_probing_packets()
 		{
 			if (icmp_hdr->un.echo.sequence==wifi_transmitted_pkt_seq_number){
 			RTT_wifi=(0.4*RTT_wifi)+(0.6*(current_timestamp()-wifi_pkt_tx_time));
-			printf("Wifi packet sequence= %d RTT wifi= %f \n",icmp_hdr->un.echo.sequence, RTT_wifi);
+			printf(" Wifi packet sequence= %d RTT wifi= %f \n",icmp_hdr->un.echo.sequence, RTT_wifi);
 			}
 		}
 		else{
 			if (icmp_hdr->un.echo.sequence==lte_transmitted_pkt_seq_number){
 			RTT_lte=(0.4*RTT_lte)+(0.6*(current_timestamp()-lte_pkt_tx_time));
-			printf("lte packet sequence= %d\n RTT lte= %f",icmp_hdr->un.echo.sequence , RTT_lte);
+			printf(" lte packet sequence= %d\n RTT lte= %f",icmp_hdr->un.echo.sequence , RTT_lte);
 			}
 		}
 		//printf("ID: %d un chnaged ID: %d  Sequence number = % d\n ", ntohs(ip_reply->id), ip_reply->id, icmp_hdr->un.echo.sequence);
-		printf("TTL: %d\n", ip_reply->ttl);
+		//printf("TTL: %d\n", ip_reply->ttl);
 
 	}
 	return 1;
@@ -461,34 +461,35 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		// XXX What does following call do?
 		mac_xface->macphy_exit("PDCP sdu buffer size > MAX_IP_PACKET_SIZE");
 	}
+	if (lte_enabled==0 && ctxt_pP->rnti>0){
+
+				memset(copy_ctxt_pP, 0, sizeof(protocol_ctxt_t));
+				copy_ctxt_pP->configured=ctxt_pP->configured;
+				copy_ctxt_pP->eNB_index=ctxt_pP->eNB_index;
+				copy_ctxt_pP->enb_flag=ctxt_pP->enb_flag;
+				copy_ctxt_pP->frame=ctxt_pP->frame;
+				copy_ctxt_pP->instance=ctxt_pP->instance;
+				copy_ctxt_pP->module_id=ctxt_pP->module_id;
+				copy_ctxt_pP->rnti=ctxt_pP->rnti;
+				copy_ctxt_pP->subframe=ctxt_pP->subframe;
+				copy_srb_flagP=false;//srb_flagP;
+				copy_rb_idP=rb_idP;
+				copy_muiP=muiP;
+				copy_confirmP=confirmP;
+				lte_enabled=1;
+				//copy_ctxt_pP=ctxt_pP;
+				copy_rb_idP=rb_idP;
+				//	copy_sdu_buffer_sizeP=sdu_buffer_sizeP;
+				//	copy_sdu_buffer_pP=sdu_buffer_pP;
+				//	copy_modeP=modeP;
+			//	printf("Original RB id =%d , muiP = %d , copy_confirmP= %d, mode= %d \n", copy_rb_idP,copy_muiP,copy_confirmP,modeP);
+			}
 
 	if (modeP == PDCP_TRANSMISSION_MODE_DATA) {
 
-		if (lte_enabled==0 ){
 
-			memset(copy_ctxt_pP, 0, sizeof(protocol_ctxt_t));
-			copy_ctxt_pP->configured=ctxt_pP->configured;
-			copy_ctxt_pP->eNB_index=ctxt_pP->eNB_index;
-			copy_ctxt_pP->enb_flag=ctxt_pP->enb_flag;
-			copy_ctxt_pP->frame=ctxt_pP->frame;
-			copy_ctxt_pP->instance=ctxt_pP->instance;
-			copy_ctxt_pP->module_id=ctxt_pP->module_id;
-			copy_ctxt_pP->rnti=ctxt_pP->rnti;
-			copy_ctxt_pP->subframe=ctxt_pP->subframe;
-			copy_srb_flagP=srb_flagP;
-			copy_rb_idP=rb_idP;
-			copy_muiP=muiP;
-			copy_confirmP=confirmP;
-			lte_enabled=1;
-			//copy_ctxt_pP=ctxt_pP;
-			copy_rb_idP=rb_idP;
-			//	copy_sdu_buffer_sizeP=sdu_buffer_sizeP;
-			//	copy_sdu_buffer_pP=sdu_buffer_pP;
-			//	copy_modeP=modeP;
-		//	printf("Original RB id =%d , muiP = %d , copy_confirmP= %d, mode= %d \n", copy_rb_idP,copy_muiP,copy_confirmP,modeP);
-		}
 		//printf("Original Context inst= %d module = %d rnti=%d configured=%d  srbid=%d\n ", ctxt_pP->instance, ctxt_pP->module_id, ctxt_pP->rnti, ctxt_pP->configured, srb_flagP);
-		printf("Copied Context inst= %d module = %d rnti=%d configured=%d \n ", copy_ctxt_pP->instance, copy_ctxt_pP->module_id, copy_ctxt_pP->rnti, copy_ctxt_pP->configured);
+		//printf("Copied Context inst= %d module = %d rnti=%d configured=%d \n ", copy_ctxt_pP->instance, copy_ctxt_pP->module_id, copy_ctxt_pP->rnti, copy_ctxt_pP->configured);
 
 		//printf("*");
 		struct iphdr *iph = (struct iphdr*) sdu_buffer_pP;
@@ -498,22 +499,21 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		//	char datagram=malloc(sdu_buffer_sizeP);
 		memcpy(datagram, sdu_buffer_pP, sdu_buffer_sizeP);
 		struct iphdr *iph1 = (struct iphdr*) datagram;
-		struct tcphdr *tcph1 = (struct tcphdr*) (datagram + 20);
-		struct udphdr *udph1 = (struct udphdr*) (datagram + 20);
+
 
 		if (iph->protocol==1){
-			printf("Main function RB id =%d , muiP = %d , copy_confirmP= %d, mode= %d \n", copy_rb_idP,copy_muiP,copy_confirmP,modeP);
+			//printf("Main function RB id =%d , muiP = %d , copy_confirmP= %d, mode= %d \n", copy_rb_idP,copy_muiP,copy_confirmP,modeP);
 			struct sockaddr_in tsaddr;
 			struct sockaddr_in tdaddr;
 			tsaddr.sin_addr.s_addr = iph1->saddr;
 			tdaddr.sin_addr.s_addr = iph1->daddr;
-			printf("##Source ip = %s,  destination ip = %s\n ",inet_ntoa(tsaddr.sin_addr), inet_ntoa(tdaddr.sin_addr));
-			printf("size of Buffer = %d",sdu_buffer_sizeP);
+			//printf("##Source ip = %s,  destination ip = %s\n ",inet_ntoa(tsaddr.sin_addr), inet_ntoa(tdaddr.sin_addr));
+		/*	printf("size of Buffer = %d",sdu_buffer_sizeP);
 			for (i=0; i<sdu_buffer_sizeP; i++)
 			{
 				printf("%.2X \t ",*(sdu_buffer_pP+i));
 			}
-			printf("\n");
+			printf("\n");*/
 		}
 		//int so = 0;
 
@@ -540,15 +540,17 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 		iph1->check = htons(0);
 		iph1->check = csum((unsigned short *) datagram,
 				sizeof(struct iphdr) / 2);
-
+		struct tcphdr *tcph1;
 		if (iph->protocol == 6) {
+			tcph1 = (struct tcphdr*) (datagram + 20);
 			tcph1->check = 0;
+			printf(" Tcp seq nu= %lu ack number= %lu synflag=%d ack = %lu\n", tcph1->seq, tcph1->ack, tcph1->syn,tcph1->ack);
 			tcph1->check = tcp_checksum(
 					(void *) (datagram + sizeof(struct iphdr)),
 					(sdu_buffer_sizeP - sizeof(struct iphdr)), iph1->saddr,
 					iph1->daddr);
 		} else if (iph->protocol == 17) {
-
+			struct udphdr *udph1 = (struct udphdr*) (datagram + 20);
 			udph1->check = 0;
 			udph1->check = udp_checksum(
 					(void *) (datagram + sizeof(struct iphdr)),
@@ -697,8 +699,36 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 
 			lte_wifi_ratio = select_ratio[index_split];
 		}
+		// Lowest RTT first Steering algorithm
+		window_size=ceil(RTT_lte)+ ceil(RTT_wifi);
+		local_tcp_counter++;
+		if (iph1->protocol==6 && tcph1->syn==1){
+			local_tcp_counter=0;
+		}
+		//find a window size where steering will based on RTT
+	if (wifi_count< window_size-ceil(RTT_wifi) && iph1->protocol==6 && tcph1->syn==0 && local_tcp_counter > 100) // LTE : Wi-Fi ::
+		{
+			printf("Packet sent through Wi-Fi, TCP Sequence number is %lu\n and tcp ack number %lu \n", tcph1->seq, tcph1->ack);
+				if (sendto(so, sendbuf, tx_len, 0,
+						(struct sockaddr *) &socket_address,
+						sizeof(struct sockaddr_ll)) < 0) {
+					perror("send to failed");
+				}
+				wifi_count++;
+				return ret;
+
+		}
+		else if (lte_count< window_size-ceil(RTT_lte) && iph1->protocol!=1){
+			lte_count++;
+		}
+		else{
+			wifi_count=0;
+			lte_count=0;
+			//lte_count++;
+		}
+
 /*
-		if (lte_wifi_ratio == 8.2) // LTE : Wi-Fi :: 80% : 20%
+ 	 	 		if (lte_wifi_ratio == 8.2) // LTE : Wi-Fi :: 80% : 20%
 		{
 			if (iph1->saddr == inet_addr("192.168.0.82") && iph1->id % 10 != 0
 					&& iph1->id % 10 != 4 && iph1->id % 10 != 5
@@ -706,8 +736,6 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 					&& iph1->id % 10 != 3 && iph1->id % 10 != 2
 					&& iph1->id % 10 != 1) {
 				wifi_count++;
-				//printf("To wi-Fi");
-				//	printf("   |-Identification    : %u\n",iph->id);
 				if (sendto(so, sendbuf, tx_len, 0,
 						(struct sockaddr *) &socket_address,
 						sizeof(struct sockaddr_ll)) < 0) {
@@ -719,6 +747,7 @@ boolean_t pdcp_data_req(protocol_ctxt_t* ctxt_pP, const srb_flag_t srb_flagP,
 				lte_count++;
 			}
 		}
+
 
 
 		if (lte_wifi_ratio == 1.11) // LTE : Wi-Fi :: 1 : 11
@@ -2660,6 +2689,9 @@ void pdcp_layer_init(void)
 	pdcp_input_sdu_remaining_size_to_read = 0;
 	RTT_lte=0;
 	RTT_wifi=0;
+	wifi_count=0;
+	local_tcp_counter=0;
+	lte_count=0;
 	memset(Pdcp_stats_tx, 0, sizeof(Pdcp_stats_tx));
 	memset(Pdcp_stats_tx_bytes, 0, sizeof(Pdcp_stats_tx_bytes));
 	memset(Pdcp_stats_tx_bytes_last, 0, sizeof(Pdcp_stats_tx_bytes_last));
