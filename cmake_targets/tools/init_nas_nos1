@@ -50,5 +50,12 @@ else
        echo "bring up oai0 interface for UE"
        sudo ifconfig oai0 10.0.1.9 netmask 255.255.255.0 broadcast 10.0.1.255
        $OPENAIR_DIR/targets/bin/rb_tool -a -c0 -i0 -z0 -s 10.0.1.9 -t 10.0.1.1 -r 1
+	echo "Updating Iptables rule to support LWIP operation"
+       sudo iptables -t nat -A PREROUTING -d 192.168.140.50  -j DNAT --to-destination 10.0.1.9
+	echo "Enabling multiple interfaces to support LWIP"
+	sudo sysctl net.ipv4.conf.all.arp_filter=1
+	sudo sysctl net.ipv4.conf.all.rp_filter=2
+	sudo sysctl net.ipv4.conf.default.arp_filter=1
+	sudo sysctl net.ipv4.conf.default.rp_filter=2
     fi
 fi  
