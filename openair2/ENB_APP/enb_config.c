@@ -190,6 +190,10 @@
 #define ENB_CONFIG_STRING_ENB_IPV4_ADDR_FOR_S1U         "ENB_IPV4_ADDRESS_FOR_S1U"
 #define ENB_CONFIG_STRING_ENB_PORT_FOR_S1U              "ENB_PORT_FOR_S1U"
 
+#define ENB_CONFIG_STRING_LWIP_INTERFACES_CONFIG     "LWIP_INTERFACES"
+#define ENB_CONFIG_STRING_ENB_INTERFACE_NAME_FOR_XW  "ENB_INTERFACE_NAME_FOR_XW"
+#define ENB_CONFIG_STRING_UE_MAC_ADDRESS_FOR_XW   "UE_MAC_ADDRESS_FOR_XW"
+
 #define ENB_CONFIG_STRING_NETWORK_CONTROLLER_CONFIG     "NETWORK_CONTROLLER"
 #define ENB_CONFIG_STRING_FLEXRAN_AGENT_INTERFACE_NAME      "FLEXRAN_AGENT_INTERFACE_NAME"
 #define ENB_CONFIG_STRING_FLEXRAN_AGENT_IPV4_ADDRESS        "FLEXRAN_AGENT_IPV4_ADDRESS"
@@ -674,6 +678,8 @@ const Enb_properties_array_t *enb_config_init(char* lib_config_file_name_pP)
   libconfig_int     enb_port_for_S1U              = 0;
   char*             enb_interface_name_for_S1_MME = NULL;
   char*             enb_ipv4_address_for_S1_MME   = NULL;
+  char*             enb_interface_name_for_XW = NULL;
+  char*             ue_mac_address_for_XW   = NULL;
   char             *address                       = NULL;
   char             *cidr                          = NULL;
   char             *astring                       = NULL;
@@ -2489,7 +2495,37 @@ const Enb_properties_array_t *enb_config_init(char* lib_config_file_name_pP)
               }
             }
           }
-	  
+
+          // LWIP_INTERFACES
+          subsetting = config_setting_get_member (setting_enb, ENB_CONFIG_STRING_LWIP_INTERFACES_CONFIG);
+
+          if (subsetting != NULL) {
+            if (  (
+                   config_setting_lookup_string( subsetting, ENB_CONFIG_STRING_ENB_INTERFACE_NAME_FOR_XW,
+                                                 (const char **)&enb_interface_name_for_XW)
+                   && config_setting_lookup_string( subsetting, ENB_CONFIG_STRING_UE_MAC_ADDRESS_FOR_XW,
+                                                    (const char **)&ue_mac_address_for_XW)
+                 )
+              ) {
+              enb_properties.properties[enb_properties_index]->enb_interface_name_for_XW = strdup(enb_interface_name_for_S1U);
+              cidr = ue_mac_address_for_XW;
+              int mac_substring=0;
+              char * token;
+              token= strtok(cidr, ":");
+              printk("UE MAC address for tunnel end point");
+              while (token!=NULL){
+            	  mac_substring++;
+            	  printk("%s",token);
+            	  token= strtok(NULL, ":");
+              }
+              printk("\n");
+              if (mac_substring==6) {
+                MAC_STR_ADDR_TO_INT_NWBO ( address, enb_properties.properties[enb_properties_index]->ue_mac_address_for_XW, "BAD UE MAC ADDRESS FORMAT !\n" );
+              }
+
+             }
+          }
+
 	  // Network Controller 
 	  subsetting = config_setting_get_member (setting_enb, ENB_CONFIG_STRING_NETWORK_CONTROLLER_CONFIG);
 

@@ -56,6 +56,14 @@
             }\
         } while (0);
 
+#define MAC_STR_ADDR_TO_INT_NWBO(AdDr_StR,NwBo,MeSsAgE ) do {\
+            struct in_addr inp;\
+            if ( inet_aton(AdDr_StR, &inp ) < 0 ) {\
+                AssertFatal (0, MeSsAgE);\
+            } else {\
+                NwBo = inp.s_addr;\
+            }\
+        } while (0);
 /** @defgroup _enb_app ENB APP 
  * @ingroup _oai2
  * @{
@@ -225,6 +233,9 @@ typedef struct Enb_properties_s {
   char               *enb_interface_name_for_S1U;
   in_addr_t           enb_ipv4_address_for_S1U;
   tcp_udp_port_t      enb_port_for_S1U;
+
+  char 			 	*enb_interface_name_for_XW;
+  int 				ue_mac_address_for_XW;
 
   char               *enb_interface_name_for_S1_MME;
   in_addr_t           enb_ipv4_address_for_S1_MME;
