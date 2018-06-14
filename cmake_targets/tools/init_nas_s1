@@ -59,7 +59,7 @@ ip route flush cache
 sleep 1
 sysctl -w net.ipv4.conf.all.log_martians=1
 echo "Disabling reverse path filtering"
-sysctl -w net.ipv4.conf.all.rp_filter=0
+#sysctl -w net.ipv4.conf.all.rp_filter=0
 ip route flush cache
 
 # Check table 200 lte in /etc/iproute2/rt_tables
@@ -69,3 +69,11 @@ if [ $? -ne 0 ]; then
 fi
 ip rule add fwmark 1 table lte
 ip route add default dev $LTEIF table lte
+
+echo "Updating Iptables rule to support LWIP operation"
+sudo iptables -t nat -A PREROUTING -d 192.168.140.50  -j DNAT --to-destination 10.0.1.9
+echo "Enabling multiple interfaces to support LWIP"
+sudo sysctl net.ipv4.conf.all.arp_filter=1
+sudo sysctl net.ipv4.conf.all.rp_filter=2
+sudo sysctl net.ipv4.conf.default.arp_filter=1
+sudo sysctl net.ipv4.conf.default.rp_filter=2
