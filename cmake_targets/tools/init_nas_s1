@@ -50,10 +50,6 @@ load_module() {
 
 load_module ../../targets/bin/ue_ip.ko
 
-if [ "$1" = "UE" ]; then
-  echo "bring up $LTEIF interface for UE"
-  ifconfig $LTEIF up
-fi
 
 ip route flush cache
 sleep 1
@@ -70,10 +66,15 @@ fi
 ip rule add fwmark 1 table lte
 ip route add default dev $LTEIF table lte
 
-echo "Updating Iptables rule to support LWIP operation"
+if [ "$1" = "UE" ]; then
+  echo "bring up $LTEIF interface for UE"
+  ifconfig $LTEIF up
+  echo "Updating Iptables rule to support LWIP operation"
 sudo iptables -t nat -A PREROUTING -d 192.168.140.50  -j DNAT --to-destination 10.0.1.9
 echo "Enabling multiple interfaces to support LWIP"
 sudo sysctl net.ipv4.conf.all.arp_filter=1
 sudo sysctl net.ipv4.conf.all.rp_filter=2
 sudo sysctl net.ipv4.conf.default.arp_filter=1
 sudo sysctl net.ipv4.conf.default.rp_filter=2
+
+fi
